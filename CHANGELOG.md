@@ -49,3 +49,7 @@ Actualización automática.
 ## 🕒 2025-12-02 20:28:17
 ✅ **Tarea:** Añadir un background muy minimalista y transparente al timer, el background debe ser de color negro y ocupar muy pocos recursos, solo debe verse cuando el lag switch este activo.
 Update: Añadir un background muy minimalista y transparente al timer, el background debe ser de color negro y ocupar muy pocos recursos, solo debe verse cuando el lag switch este activo.
+
+## 🕒 2025-12-02 20:39:22
+✅ **Tarea:** Optimizar la funcion flush_worker para usar menos memoria.
+Update: Optimizar la funcion flush_worker para usar menos memoria.

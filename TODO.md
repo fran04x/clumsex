@@ -1,1 +1,0 @@
-- [ ] Optimizar la funcion flush_worker para usar menos memoria.
