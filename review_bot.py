@@ -5,13 +5,24 @@ from google import genai
 NOMBRE_ARCHIVO_CODIGO = "clumsex v12.2 stable.py"
 # ---------------------
 
+def clean_gemini_response(response_text):
+    """Limpia las fences de Markdown y espacios en blanco de la respuesta."""
+    lines = response_text.strip().split('\n')
+    if lines and lines[0].strip().startswith('```'):
+        # Elimina la primera línea (e.g., ```python)
+        lines = lines[1:]
+    if lines and lines[-1].strip() == '```':
+        # Elimina la última línea (```)
+        lines = lines[:-1]
+    return '\n'.join(lines).strip()
+
 def run_review():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("Falta la clave API.")
         return
 
-    # 1. VERIFICAR Y LEER EL ARCHIVO
+    # 1. LEER EL ARCHIVO
     if not os.path.exists(NOMBRE_ARCHIVO_CODIGO):
         print(f"ERROR: No encuentro el archivo '{NOMBRE_ARCHIVO_CODIGO}'.")
         return
@@ -19,37 +30,26 @@ def run_review():
     with open(NOMBRE_ARCHIVO_CODIGO, "r", encoding="utf-8") as f:
         contenido_codigo = f.read()
 
-    # 2. PREPARAR EL PROMPT
+    # 2. PREPARAR EL PROMPT Y ENVIAR
     prompt = f"""
-    Actúa como un experto en Python y optimización de redes (WinDivert/Raw Sockets).
-    Tu tarea es actualizar y optimizar el siguiente script.
-    
-    INSTRUCCIONES:
-    1. Analiza el código buscando cuellos de botella, fugas de memoria o lógica ineficiente.
-    2. Aplica correcciones y mejoras de rendimiento.
-    3. Entrega EL CÓDIGO COMPLETO y LISTO PARA USAR. 
-    4. NO expliques los cambios, solo entrega el bloque de código Python.
-    
-    --- ARCHIVO: {NOMBRE_ARCHIVO_CODIGO} ---
+    Actúa como experto en Python. Entrega ÚNICAMENTE el código Python completo y corregido.
+    --- CÓDIGO A REVISAR ---
     {contenido_codigo}
     """
-
-    # 3. ENVIAR A GEMINI
     client = genai.Client(api_key=api_key)
     
     try:
-        print(f"Enviando '{NOMBRE_ARCHIVO_CODIGO}' a Gemini para actualización...")
-        response = client.models.generate_content(
-            model='gemini-2.0-flash', 
-            contents=prompt
-        )
+        print(f"Enviando '{NOMBRE_ARCHIVO_CODIGO}' a Gemini...")
+        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         
-        # 4. GUARDAR EL CÓDIGO NUEVO EN EL MISMO ARCHIVO
-        new_content = response.text
+        # 3. LIMPIAR EL CONTENIDO DE MARKDOWN
+        new_content = clean_gemini_response(response.text)
+        
+        # 4. GUARDAR EL CÓDIGO LIMPIO EN EL MISMO ARCHIVO
         with open(NOMBRE_ARCHIVO_CODIGO, "w", encoding="utf-8") as f:
             f.write(new_content)
             
-        print(f"ÉXITO: Código optimizado guardado localmente en '{NOMBRE_ARCHIVO_CODIGO}'.")
+        print(f"ÉXITO: Contenido limpio guardado en '{NOMBRE_ARCHIVO_CODIGO}'.")
         
     except Exception as e:
         print(f"Error en la llamada a la API: {e}")
