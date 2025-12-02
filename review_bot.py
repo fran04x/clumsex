@@ -2,20 +2,18 @@ import os
 from google import genai
 
 # --- CONFIGURACIÓN ---
-# El nombre exacto tal cual está en tu repositorio
 NOMBRE_ARCHIVO_CODIGO = "clumsex v12.2 stable.py"
 # ---------------------
 
 def run_review():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("Falta la API Key en los secretos del repositorio.")
+        print("Falta la clave API.")
+        return
 
     # 1. VERIFICAR Y LEER EL ARCHIVO
     if not os.path.exists(NOMBRE_ARCHIVO_CODIGO):
-        # Listar archivos para depuración en los logs si falla
-        print(f"ERROR CRÍTICO: No encuentro '{NOMBRE_ARCHIVO_CODIGO}'.")
-        print("Archivos encontrados en el directorio actual:", os.listdir())
+        print(f"ERROR: No encuentro el archivo '{NOMBRE_ARCHIVO_CODIGO}'.")
         return
 
     with open(NOMBRE_ARCHIVO_CODIGO, "r", encoding="utf-8") as f:
@@ -37,7 +35,6 @@ def run_review():
     """
 
     # 3. ENVIAR A GEMINI
-    # Usamos gemini-2.0-flash por ser el modelo más rápido y eficiente para iteraciones frecuentes
     client = genai.Client(api_key=api_key)
     
     try:
@@ -47,20 +44,15 @@ def run_review():
             contents=prompt
         )
         
-        print("\n" + "▼"*30)
-        print(">>> INICIO DEL CÓDIGO ACTUALIZADO <<<")
-        print("▼"*30 + "\n")
-        
-        # Imprime el código limpio para que lo copies desde el log
-        print(response.text) 
-        
-        print("\n" + "▲"*30)
-        print(">>> FIN DEL CÓDIGO ACTUALIZADO <<<")
-        print("▲"*30 + "\n")
+        # 4. GUARDAR EL CÓDIGO NUEVO EN EL MISMO ARCHIVO
+        new_content = response.text
+        with open(NOMBRE_ARCHIVO_CODIGO, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
+        print(f"ÉXITO: Código optimizado guardado localmente en '{NOMBRE_ARCHIVO_CODIGO}'.")
         
     except Exception as e:
         print(f"Error en la llamada a la API: {e}")
-        # Forzar error para que GitHub notifique el fallo (X roja)
         raise e
 
 if __name__ == "__main__":
