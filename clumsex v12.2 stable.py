@@ -652,4 +652,6 @@ class ClumsexGUI(tk.Tk):
 
 if __name__ == "__main__":
     app = ClumsexGUI()
+
     app.mainloop()
+    # Comentario de prueba para forzar nueva version
