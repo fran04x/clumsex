@@ -126,7 +126,7 @@ def run_review():
             )
             
             # Usamos 2.0 Flash porque maneja contextos largos mejor
-            response = client.models.generate_content(model='gemini-1.5-flash', contents=full_prompt)
+            response = client.models.generate_content(model='gemini-2.0-flash-lite', contents=full_prompt)
             full_text = response.text
             
             # 1. Separar Log
