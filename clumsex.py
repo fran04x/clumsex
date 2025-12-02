@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 19:10:20 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 19:18:43 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -13,10 +13,14 @@ from collections import deque
 from pynput import mouse, keyboard
 import pystray
 from PIL import Image, ImageDraw
+import logging
+
+# --- CONFIGURACION LOGGING ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- ESTRUCTURAS WINDOWS ---
 class RECT(ctypes.Structure):
-    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), 
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
                 ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
 
 def resource_path(relative_path):
@@ -35,36 +39,36 @@ class GlobalState:
         self.duration = 12.0
         self.lock_timer = True
         self.timer_pos = None
-        self.hotkey_type = "mouse" 
+        self.hotkey_type = "mouse"
         self.trigger_btn = mouse.Button.middle
         self.trigger_str = "Middle Click"
-        
+
         self.lag_event = threading.Event()
-        
+
         self.lock = threading.Lock()
         self.gc_lock = threading.Lock()
-        
+
         # Sincronización eficiente entre Capture y Flush
         self.buffer_cond = threading.Condition()
-        
+
         self.current_ip = "---"
         self.last_ip = "---"
         self.lag_start_time = 0.0
         self.last_toggle_time = 0.0
-        
+
         self.packet_buffer = deque(maxlen=10000)
         self.shaping_rate = 2000
         self.shaping_burst = 50
-        
-        self.gc_dirty = False 
+
+        self.gc_dirty = False
         self.app_running = True
         self.remap_mode = False
         self.divert = None
         self.game_window_title = "RotMG Exalt"
-        
+
         self.mouse_listener = None
         self.kb_listener = None
-        
+
         self.load_config()
 
     def get_clean_trigger_str(self, key_obj, k_type):
@@ -87,8 +91,10 @@ class GlobalState:
             "trigger_val": trigger_val
         }
         try:
-            with open(CONFIG_FILE, 'w') as f: json.dump(data, f, indent=4)
-        except Exception: print("Error saving config")
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            logging.error(f"Error saving config: {e}")
 
     def load_config(self):
         if not os.path.exists(CONFIG_FILE): return
@@ -112,7 +118,8 @@ class GlobalState:
                     else:
                         self.trigger_btn = keyboard.KeyCode(char=t_val)
                 self.trigger_str = self.get_clean_trigger_str(self.trigger_btn, self.hotkey_type)
-        except Exception: print("Error loading config")
+        except Exception as e:
+            logging.error(f"Error loading config: {e}")
 
 state = GlobalState()
 
@@ -124,15 +131,17 @@ def optimize_system():
         handle = ctypes.windll.kernel32.OpenProcess(0x1F0FFF, False, pid)
         # Prioridad NORMAL para evitar starvation en CPUs débiles
         ctypes.windll.kernel32.SetPriorityClass(handle, 0x00000020)
-            
+
         ctypes.windll.kernel32.CloseHandle(handle)
         ctypes.windll.winmm.timeBeginPeriod(1)
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('clumsex.v12.2')
-    except Exception: print("Error optimizing system")
+    except Exception as e:
+        logging.error(f"Error optimizing system: {e}")
 
 def restore_system():
     try: ctypes.windll.winmm.timeEndPeriod(1)
-    except Exception: print("Error restoring system")
+    except Exception as e:
+        logging.error(f"Error restoring system: {e}")
 
 def restore_gc():
     with state.gc_lock:
@@ -147,18 +156,18 @@ def watchdog_worker():
         # Espera pasiva eficiente (0% CPU)
         if state.lag_event.wait():
             deadline = state.lag_start_time + state.duration
-            
+
             while state.lag_event.is_set():
                 now = time.perf_counter()
                 remaining = deadline - now
-                
+
                 if remaining <= 0:
                     deactivate_lag()
                     break
-                
+
                 # Dormir inteligentemente
                 time.sleep(min(remaining, 0.1))
-                
+
             # Limpieza GC al salir
             if state.gc_dirty:
                 restore_gc()
@@ -166,24 +175,24 @@ def watchdog_worker():
 # --- CAPTURE WORKER ---
 def capture_worker():
     active_port_filter = state.target_port
-    
+
     while state.app_running:
         current_filter = f"outbound and tcp.DstPort == {active_port_filter} and tcp.PayloadLength > 0"
-        
+
         try:
             with pydivert.WinDivert(current_filter) as w:
                 state.divert = w
-                
+
                 # Bucle bloqueante (0% CPU idle)
                 for packet in w:
                     if not state.app_running: break
-                    
+
                     if state.target_port != active_port_filter:
                         # Forzar flush y despertar worker
                         with state.buffer_cond:
                             state.buffer_cond.notify()
                         active_port_filter = state.target_port
-                        break 
+                        break
 
                     with state.lock:
                         if state.current_ip != packet.dst_addr:
@@ -197,16 +206,16 @@ def capture_worker():
                     else:
                         # Lag OFF: Passthrough
                         w.send(packet)
-                        
+
                         # [Fix #3] Notificar SOLO si hay buffer remanente
                         if state.packet_buffer:
                             with state.buffer_cond:
                                 state.buffer_cond.notify()
 
-        except OSError: 
-            print("WinDivert OSError")
+        except OSError as e:
+            logging.error(f"WinDivert OSError: {e}")
         except Exception as e:
-            print(f"Capture died: {e}")
+            logging.error(f"Capture died: {e}")
             time.sleep(1)
         finally:
             state.divert = None
@@ -219,13 +228,13 @@ def flush_worker():
             queue = state.packet_buffer
             base_rate = state.shaping_rate
             burst = state.shaping_burst
-            
+
             tokens = burst
             last_check = perf()
 
             while state.app_running:
                 packet_data = None
-                
+
                 # 1. ESPERA EFICIENTE
                 with state.buffer_cond:
                     # Dormir si no hay datos O hay lag activo
@@ -233,7 +242,7 @@ def flush_worker():
                         if state.lag_event.is_set():
                             last_check = perf()
                         state.buffer_cond.wait(1) # 0% CPU Sleep, con timeout
-                    
+
                     if not state.app_running: break
                     try:
                         packet_data = queue.popleft()
@@ -247,7 +256,7 @@ def flush_worker():
                     continue
 
                 current_rate = base_rate * 3.0 if len(queue) > 5000 else base_rate
-                
+
                 now = perf()
                 elapsed = now - last_check
                 last_check = now
@@ -259,7 +268,7 @@ def flush_worker():
                     needed = 1.0 - tokens
                     wait_time = needed / current_rate
                     if wait_time > 0: time.sleep(wait_time)
-                    
+
                     now = perf()
                     elapsed = now - last_check
                     last_check = now
@@ -273,20 +282,20 @@ def flush_worker():
                 try:
                     w_inject.send(packet_data)
                     tokens -= 1.0
-                except Exception:
-                    pass #print(f"Flush Send Err: {e}")
-                
+                except Exception as e:
+                    logging.debug(f"Flush Send Err: {e}")
+
                 if not queue:
                     restore_gc()
                     if current_rate > base_rate: gc.collect()
 
     except Exception as e:
-        print(f"Flush died: {e}")
+        logging.error(f"Flush died: {e}")
 
 # --- CONTROL ---
 def toggle_lag(source="unknown"):
     if state.remap_mode: return
-    
+
     now = time.time()
     if (now - state.last_toggle_time) < 0.2: return
     state.last_toggle_time = now
@@ -315,33 +324,33 @@ def deactivate_lag():
 # --- INPUT SYSTEM ---
 def on_input_event(key_or_btn, device_type):
     if device_type == "mouse":
-        if key_or_btn == mouse.Button.left or key_or_btn == mouse.Button.right: return 
-    
+        if key_or_btn == mouse.Button.left or key_or_btn == mouse.Button.right: return
+
     if device_type == "keyboard":
-        invalid_keys = [keyboard.Key.shift, keyboard.Key.shift_r, 
+        invalid_keys = [keyboard.Key.shift, keyboard.Key.shift_r,
                         keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
                         keyboard.Key.alt_l, keyboard.Key.alt_gr,
                         keyboard.Key.cmd, keyboard.Key.cmd_r,
                         keyboard.Key.caps_lock]
-        if key_or_btn in invalid_keys: return 
-    
+        if key_or_btn in invalid_keys: return
+
     with state.lock:
         state.hotkey_type = device_type
         state.trigger_btn = key_or_btn
         state.trigger_str = state.get_clean_trigger_str(key_or_btn, device_type)
         state.remap_mode = False
         state.save_config()
-    
+
     threading.Thread(target=restart_input_listeners, daemon=True).start()
     return False
 
 def restart_input_listeners():
     if state.mouse_listener:
-        try: state.mouse_listener.stop(); state.mouse_listener.join(0.1) 
-        except Exception: print("Error stopping mouse listener")
+        try: state.mouse_listener.stop(); state.mouse_listener.join(0.1)
+        except Exception as e: logging.error(f"Error stopping mouse listener: {e}")
     if state.kb_listener:
         try: state.kb_listener.stop(); state.kb_listener.join(0.1)
-        except Exception: print("Error stopping kb listener")
+        except Exception as e: logging.error(f"Error stopping kb listener: {e}")
     time.sleep(0.1)
     state.mouse_listener = mouse.Listener(on_click=on_mouse_click)
     state.mouse_listener.start()
@@ -365,10 +374,10 @@ class OverlayTimer(tk.Toplevel):
         self.attributes("-topmost", True)
         self.attributes("-transparentcolor", "black")
         self.configure(bg="black")
-        
+
         self.lbl_time = tk.Label(self, text="READY", font=("Segoe UI", 16, "bold"), bg="black", fg="#00FF00")
         self.lbl_time.pack(expand=True)
-        
+
         self.width = 150
         self.height = 50
         self._offsetx = 0
@@ -376,15 +385,15 @@ class OverlayTimer(tk.Toplevel):
         self._last_visible = False
         self._last_text = ""
         self._last_color = ""
-        
+
         # [Fix #6] Contador para Throttling de Tracking
-        self.track_counter = 0 
-        
+        self.track_counter = 0
+
         self.bind('<Button-1>', self.click_win)
         self.bind('<B1-Motion>', self.drag_win)
         self.bind('<ButtonRelease-1>', self.release_win)
         self.update_click_through()
-        
+
         if state.timer_pos:
             self.geometry(f"{self.width}x{self.height}+{state.timer_pos[0]}+{state.timer_pos[1]}")
         else:
@@ -408,25 +417,25 @@ class OverlayTimer(tk.Toplevel):
             hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
             style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
             if state.lock_timer:
-                style = style | 0x80000 | 0x20 
+                style = style | 0x80000 | 0x20
                 self.lbl_time.config(cursor="arrow")
             else:
                 style = style & ~0x20 | 0x80000
                 self.lbl_time.config(cursor="fleur")
             ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
-        except Exception:
-            pass #print("Error updating click through")
+        except Exception as e:
+            logging.debug(f"Error updating click through: {e}")
 
     def update_view(self):
         is_visible = (not state.lock_timer) or state.lag_event.is_set()
-        
+
         if is_visible != self._last_visible:
             if not is_visible: self.withdraw()
             else:
                 self.deiconify()
                 self.attributes("-topmost", True)
             self._last_visible = is_visible
-            
+
         if not is_visible: return
 
         text, color = "", ""
@@ -441,7 +450,7 @@ class OverlayTimer(tk.Toplevel):
             elif remaining > 3.0: color = "#FFFF00"
             else: color = "#FF0000"
             text = f"{remaining:.1f}s"
-            
+
         if text != self._last_text or color != self._last_color:
             self.lbl_time.config(text=text, fg=color)
             self._last_text, self._last_color = text, color
@@ -458,39 +467,39 @@ class OverlayTimer(tk.Toplevel):
                         ctypes.windll.user32.GetWindowRect(hwnd_target, ctypes.byref(rect))
                         win_w = rect.right - rect.left
                         new_x = rect.left + (win_w // 2) - (self.width // 2)
-                        new_y = rect.top + 20 
-                        
+                        new_y = rect.top + 20
+
                         curr_geo = self.geometry().split('+')
                         if len(curr_geo) > 1:
                             cx, cy = int(curr_geo[1]), int(curr_geo[2])
                             if abs(cx - new_x) > 2 or abs(cy - new_y) > 2:
                                 self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
-                except Exception:
-                    pass #print("Error tracking window")
+                except Exception as e:
+                    logging.debug(f"Error tracking window: {e}")
 
 # --- GUI PRINCIPAL ---
 class ClumsexGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("clumsex")
-        self.geometry("240x390") 
+        self.geometry("240x390")
         self.resizable(False, False)
         try: self.iconbitmap(resource_path("clumsex.ico"))
         except Exception: pass
-        
+
         self.protocol("WM_DELETE_WINDOW", self.on_close_x)
         self.bind("<Map>", self.on_window_state_change)
-        
+
         self.tray_icon = None
         self.last_icon_color = "red"
         self._last_lag_state = None
         self._last_ip_text = ""
         self._last_prev_ip_text = ""
         self._last_btn_text = ""
-        
+
         self.bg_color = "#f2f2f2"
         self.configure(bg=self.bg_color)
-        
+
         style = ttk.Style()
         style.theme_use('clam')
         style.configure("TFrame", background=self.bg_color)
@@ -500,14 +509,14 @@ class ClumsexGUI(tk.Tk):
         style.configure("TCheckbutton", background=self.bg_color, font=("Segoe UI", 9))
         style.configure("Flat.TButton", font=("Segoe UI", 9, "bold"), relief="flat", background="#e0e0e0")
         style.map("Flat.TButton", background=[('active', '#d0d0d0')])
-        
+
         self.var_port = tk.StringVar(value=state.target_port)
         self.var_duration = tk.StringVar(value=str(int(state.duration)))
         self.var_ip = tk.StringVar(value="---")
         self.var_last_ip = tk.StringVar(value="---")
         self.var_btn_text = tk.StringVar(value=f"{state.trigger_str}")
         self.var_lock = tk.BooleanVar(value=state.lock_timer)
-        
+
         self.overlay = OverlayTimer(self)
         self.create_widgets()
         self.after(1000, self.delayed_startup)
@@ -533,10 +542,10 @@ class ClumsexGUI(tk.Tk):
 
         content = ttk.Frame(self)
         content.pack(side="top", fill="both", expand=True, padx=15, pady=10)
-        
+
         f_ip = ttk.LabelFrame(content, text="IP History")
         f_ip.pack(fill="x", pady=(0, 10), ipady=3)
-        f_ip.columnconfigure(1, weight=1) 
+        f_ip.columnconfigure(1, weight=1)
         ttk.Label(f_ip, text="Previous:", font=("Segoe UI", 9, "bold"), foreground="#888").grid(row=0, column=0, padx=(10, 5), pady=2, sticky="w")
         ttk.Label(f_ip, textvariable=self.var_last_ip, foreground="#888", font=("Segoe UI", 9)).grid(row=0, column=1, sticky="w")
         tk.Button(f_ip, text="❐", font=("Segoe UI", 8), command=self.copy_last_ip, bd=0, bg="#f0f0f0", cursor="hand2").grid(row=0, column=2, padx=10)
@@ -545,7 +554,7 @@ class ClumsexGUI(tk.Tk):
         tk.Button(f_ip, text="❐", font=("Segoe UI", 8), command=self.copy_ip, bd=0, bg="#f0f0f0", cursor="hand2").grid(row=1, column=2, padx=10)
 
         f_cfg = ttk.LabelFrame(content, text="Configuration")
-        f_cfg.pack(fill="x", pady=(0, 10), ipady=2) 
+        f_cfg.pack(fill="x", pady=(0, 10), ipady=2)
         f_port = ttk.Frame(f_cfg)
         f_port.pack(fill="x", padx=10, pady=3)
         ttk.Label(f_port, text="Target Port:").pack(side="left")
@@ -564,7 +573,7 @@ class ClumsexGUI(tk.Tk):
         chk_lock.pack(side="left")
 
         f_trig = ttk.LabelFrame(content, text="Trigger")
-        f_trig.pack(fill="x", pady=(0, 0), ipady=2) 
+        f_trig.pack(fill="x", pady=(0, 0), ipady=2)
         lbl_trig = ttk.Label(f_trig, textvariable=self.var_btn_text, font=("Segoe UI", 9, "bold"), anchor="center")
         lbl_trig.pack(fill="x", pady=(5, 3))
         btn_remap = ttk.Button(f_trig, text="Remap Key / Button", command=lambda: setattr(state, 'remap_mode', True), style="Flat.TButton")
@@ -578,9 +587,9 @@ class ClumsexGUI(tk.Tk):
     def update_loop(self):
         with state.lock:
             active_now = state.lag_event.is_set()
-            
+
         self.overlay.update_view()
-        
+
         if active_now != self._last_lag_state:
             target_color = "#00cc00" if active_now else "#cc0000"
             status_text = "ON" if active_now else "OFF"
@@ -589,11 +598,11 @@ class ClumsexGUI(tk.Tk):
             if self.tray_icon:
                 self.tray_icon.icon = self.create_tray_image(target_color)
             self._last_lag_state = active_now
-            
+
         w = self.canvas_ind.winfo_width()
         self.canvas_ind.coords(self.ind_rect, 0, 0, w, 50)
         self.canvas_ind.coords(self.ind_text, w/2, 23)
-        
+
         with state.lock:
             if state.current_ip != self._last_ip_text:
                 self.var_ip.set(state.current_ip)
@@ -601,13 +610,13 @@ class ClumsexGUI(tk.Tk):
             if state.last_ip != self._last_prev_ip_text:
                 self.var_last_ip.set(state.last_ip)
                 self._last_prev_ip_text = state.last_ip
-            
+
         if state.remap_mode: txt = "Press Key..."
         else: txt = f"{state.trigger_str}"
         if txt != self._last_btn_text:
             self.var_btn_text.set(txt)
             self._last_btn_text = txt
-            
+
         self.after(66, self.update_loop)
 
     def check_minimize_loop(self):
@@ -621,7 +630,8 @@ class ClumsexGUI(tk.Tk):
             state.target_port = self.var_port.get()
             state.duration = float(self.var_duration.get())
             state.save_config()
-        except Exception: print("Error updating config")
+        except Exception as e:
+            logging.error(f"Error updating config: {e}")
 
     def copy_ip(self):
         self.clipboard_clear()
@@ -637,19 +647,19 @@ class ClumsexGUI(tk.Tk):
         state.app_running = False
         if state.mouse_listener:
             try: state.mouse_listener.stop()
-            except Exception: print("Error stopping mouse listener on close")
+            except Exception as e: logging.error(f"Error stopping mouse listener on close: {e}")
         if state.kb_listener:
             try: state.kb_listener.stop()
-            except Exception: print("Error stopping kb listener on close")
+            except Exception as e: logging.error(f"Error stopping kb listener on close: {e}")
         if state.divert:
             try: state.divert.close()
-            except Exception: print("Error closing divert on close")
+            except Exception as e: logging.error(f"Error closing divert on close: {e}")
         if self.tray_icon: self.tray_icon.stop()
-        
+
         # Wake up workers to exit loops
         with state.buffer_cond:
             state.buffer_cond.notify_all()
-            
+
         restore_system()
         self.destroy()
         time.sleep(0.1)
@@ -658,14 +668,15 @@ class ClumsexGUI(tk.Tk):
     def create_tray_image(self, color_str):
         image_file = resource_path("icon_on.png") if color_str == "#00cc00" else resource_path("icon_off.png")
         try: return Image.open(image_file)
-        except Exception:
+        except Exception as e:
+            logging.error(f"Error loading tray icon: {e}")
             image = Image.new('RGB', (64, 64), (0, 0, 0))
             d = ImageDraw.Draw(image)
             d.rectangle([10, 10, 54, 54], fill=color_str)
             return image
 
     def show_tray(self):
-        if self.tray_icon: return 
+        if self.tray_icon: return
         initial_color = "#00cc00" if state.lag_event.is_set() else "#cc0000"
         self.last_icon_color = initial_color
         def restore_window(icon, item):
@@ -681,7 +692,3 @@ class ClumsexGUI(tk.Tk):
         )
         self.tray_icon = pystray.Icon("clumsex", self.create_tray_image(initial_color), "clumsex", menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
-
-if __name__ == "__main__":
-    app = ClumsexGUI()
-    app.mainloop()
