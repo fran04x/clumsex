@@ -30,7 +30,7 @@ def run_review():
 
     # Prompt
     prompt = f"""
-    Actúa como experto en Python. Optimiza y mejora el siguiente código.
+    Actúa como experto en Python. Revisa bugs de sintaxis y posibles optimizaciones de CPU sin perder ninguna funcionalidad.
     IMPORTANTE: Devuelve el código completo listo para usar.
     --- CÓDIGO ---
     {contenido_codigo}
