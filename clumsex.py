@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 17:54:09 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 18:32:57 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -221,6 +221,7 @@ def capture_worker():
                             state.packet_buffer.append((packet.raw, packet.interface, packet.direction))
                     else:
                         w.send(packet)
+                        # [Optimization #1] Check if packet buffer is empty before notifying threads
                         if state.packet_buffer:
                             with state.buffer_cond:
                                 state.buffer_cond.notify_all() #Notify all threads
@@ -249,9 +250,8 @@ def flush_worker():
             while state.app_running:
                 packet_data = None
                 with state.buffer_cond:
+                    # [Optimization #2] Combine condition checks into a single while loop
                     while (not queue or state.lag_event.is_set()) and state.app_running:
-                        if state.lag_event.is_set():
-                            last_check = perf()
                         state.buffer_cond.wait()  # Wait until notified
 
                     if not state.app_running:
@@ -415,7 +415,7 @@ class OverlayTimer(tk.Toplevel):
         self._last_visible = False
         self._last_text = ""
         self._last_color = ""
-        self.track_counter = 0
+        self._track_counter = 0
 
         self.bind('<Button-1>', self.click_win)
         self.bind('<B1-Motion>', self.drag_win)
@@ -499,9 +499,9 @@ class OverlayTimer(tk.Toplevel):
             self._last_text, self._last_color = text, color
 
         if state.lock_timer and is_lagging:
-            self.track_counter += 1
-            if self.track_counter >= 8:
-                self.track_counter = 0
+            self._track_counter += 1
+            if self._track_counter >= 8:
+                self._track_counter = 0
                 try:
                     hwnd_target = ctypes.windll.user32.FindWindowW(None, state.game_window_title)
                     if hwnd_target:
@@ -723,5 +723,4 @@ class ClumsexGUI(tk.Tk):
 
     def on_close_x(self):
         """Handles the closing of the main window."""
-        state.app_running = False
-        if state.mouse_listener:
+        state.app_running
