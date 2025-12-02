@@ -2,32 +2,42 @@ name: 'Actualizador de Clumsex (5 min)'
 
 on:
   schedule:
-    # CRON SINTAXIS: minuto hora dia_mes mes dia_semana
-    # Intentar ejecutar cada 5 minutos. 
+    # Ejecución cada 5 minutos
     - cron: '*/5 * * * *'
-  
-  # Permite ejecución manual con el botón si no quieres esperar
   workflow_dispatch:
 
 jobs:
   auto_update:
     runs-on: ubuntu-latest
+    
+    # === CRÍTICO: PERMISOS DE ESCRITURA ===
     permissions:
-      contents: read
-      
+      contents: write # Esto permite que el bot haga push
+    
     steps:
       - name: Checkout del Repositorio
+        # Es necesario descargar el código para poder leerlo y modificarlo
         uses: actions/checkout@v4
-
+        
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Versión estable y moderna
+          python-version: '3.11'
 
       - name: Instalar Librería de Google
         run: pip install google-genai
 
-      - name: Ejecutar Bot de Actualización
+      - name: Ejecutar Bot de Actualización (Genera y Guarda Nuevo Código)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python review_bot.py
+
+      # === PASO NUEVO: AUTO-COMMIT Y SUBIDA (PUSH) ===
+      - name: Auto-Commit de la Nueva Versión
+        # Esta acción revisa si el archivo cambió y hace commit/push automáticamente
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: [AUTO-UPDATE] Código de Clumsex actualizado por Gemini"
+          # Patrón para asegurar que solo se suba el archivo modificado:
+          file_pattern: 'clumsex v12.2 stable.py' 
+          commit_author: 'Gemini Bot <actions@github.com>'
