@@ -47,10 +47,10 @@ jobs:
           git config --global user.email 'bot@noreply.github.com'
           
           # 2. Agregar el archivo modificado
-          git add clumsex.py
+          git add clumsex.py CHANGELOG.md
           
-          # 3. Commit (El timestamp asegura que siempre haya cambios)
-          git commit -m "chore: [AUTO-UPDATE] Nueva versión optimizada por Gemini" || echo "⚠️ Aviso: No hubo cambios detectados."
+          # 3. Commit
+          git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios."
           
           # 4. Push explícito a la rama principal
           git push origin HEAD:main
