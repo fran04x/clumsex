@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 20:39:22 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 20:53:25 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -78,7 +78,7 @@ class GlobalState:
         else:
             try:
                 return key_obj.char.upper() if hasattr(key_obj, 'char') else str(key_obj).replace("Key.", "").upper()
-            except:
+            except AttributeError:
                 return str(key_obj).replace("Key.", "").upper()
 
     def save_config(self):
@@ -96,7 +96,7 @@ class GlobalState:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            logging.error(f"Error saving config: {e}")
+            logging.error(f"Error saving config: %s", e)
 
     def load_config(self):
         """Loads the configuration from a JSON file."""
@@ -107,7 +107,7 @@ class GlobalState:
             with open(CONFIG_FILE, 'r') as f:
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            logging.error(f"Error loading config: {e}")
+            logging.error(f"Error loading config: %s", e)
             return
 
         self.target_port = data.get("port", "2050")
@@ -145,14 +145,14 @@ def optimize_system():
         ctypes.windll.winmm.timeBeginPeriod(1)
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('clumsex.v12.2')
     except Exception as e:
-        logging.error(f"Error optimizing system: {e}")
+        logging.error(f"Error optimizing system: %s", e)
 
 def restore_system():
     """Restores system settings to their defaults."""
     try:
         ctypes.windll.winmm.timeEndPeriod(1)
     except Exception as e:
-        logging.error(f"Error restoring system: {e}")
+        logging.error(f"Error restoring system: %s", e)
 
 def restore_gc():
     """Restores garbage collection if it was disabled."""
@@ -214,10 +214,10 @@ def capture_worker():
                                 state.buffer_cond.notify()
 
         except OSError as e:
-            logging.error(f"WinDivert OSError: {e}")
+            logging.error(f"WinDivert OSError: %s", e)
             time.sleep(1)  # Add a small delay to prevent busy-looping on error
         except Exception as e:
-            logging.error(f"Capture died: {e}")
+            logging.error(f"Capture died: %s", e)
             time.sleep(1)
         finally:
             state.divert = None
@@ -279,7 +279,7 @@ def flush_worker():
                     w_inject.send(packet_data)
                     tokens -= 1.0
                 except Exception as e:
-                    logging.debug(f"Flush Send Err: {e}")
+                    logging.debug(f"Flush Send Err: %s", e)
 
                 if not queue:
                     restore_gc()
@@ -287,7 +287,7 @@ def flush_worker():
                         gc.collect()
 
     except Exception as e:
-        logging.error(f"Flush died: {e}")
+        logging.error(f"Flush died: %s", e)
 
 # --- CONTROL ---
 def toggle_lag(source="unknown"):
@@ -349,7 +349,7 @@ def restart_input_listeners():
                 listener.stop()
                 listener.join(0.1)
             except Exception as e:
-                logging.error(f"Error stopping {listener_name} listener: {e}")
+                logging.error(f"Error stopping {listener_name} listener: %s", e)
 
     safe_stop(state.mouse_listener, "mouse")
     safe_stop(state.kb_listener, "keyboard")
@@ -430,7 +430,7 @@ class OverlayTimer(tk.Toplevel):
             ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
             self.lbl_time.config(cursor="arrow" if state.lock_timer else "fleur")
         except Exception as e:
-            logging.debug(f"Error updating click through: {e}")
+            logging.debug(f"Error updating click through: %s", e)
 
     def update_view(self):
         """Updates the overlay timer view."""
@@ -472,7 +472,7 @@ class OverlayTimer(tk.Toplevel):
                         if abs(self.winfo_x() - new_x) > 2 or abs(self.winfo_y() - new_y) > 2:
                             self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
                 except Exception as e:
-                    logging.debug(f"Error tracking window: {e}")
+                    logging.debug(f"Error tracking window: %s", e)
 
 # --- GUI PRINCIPAL ---
 class ClumsexGUI(tk.Tk):
@@ -635,7 +635,7 @@ class ClumsexGUI(tk.Tk):
         except ValueError:
             logging.error("Invalid port or duration value.")
         except Exception as e:
-            logging.error(f"Error updating config: {e}")
+            logging.error(f"Error updating config: %s", e)
 
     def copy_ip(self):
         """Copies the current IP to the clipboard."""
@@ -660,7 +660,7 @@ class ClumsexGUI(tk.Tk):
                 try:
                     listener.stop()
                 except Exception as e:
-                    logging.error(f"Error stopping {listener_name} listener on close: {e}")
+                    logging.error(f"Error stopping {listener_name} listener on close: %s", e)
 
         safe_stop(state.mouse_listener, "mouse")
         safe_stop(state.kb_listener, "keyboard")
@@ -669,7 +669,7 @@ class ClumsexGUI(tk.Tk):
             try:
                 state.divert.close()
             except Exception as e:
-                logging.error(f"Error closing divert on close: {e}")
+                logging.error(f"Error closing divert on close: %s", e)
 
         if self.tray_icon:
             self.tray_icon.stop()
@@ -690,7 +690,7 @@ class ClumsexGUI(tk.Tk):
         except FileNotFoundError:
             logging.error(f"Tray icon file not found: {image_file}")
         except Exception as e:
-            logging.error(f"Error loading tray icon: {e}")
+            logging.error(f"Error loading tray icon: %s", e)
 
         image = Image.new('RGB', (64, 64), (0, 0, 0))
         d = ImageDraw.Draw(image)
@@ -718,7 +718,6 @@ class ClumsexGUI(tk.Tk):
         def run_tray():
             self.tray_icon.run()
 
-        threading.Thread(target=run_tray, daemon=True).start()
-
 if __name__ == "__main__":
-    app = Clum
+    app = ClumsexGUI()
+    app.mainloop()
