@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 19:40:25 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 19:49:35 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -85,8 +85,7 @@ class GlobalState:
 
     def save_config(self):
         """Saves the configuration to a JSON file."""
-        if not os.path.exists(CONFIG_DIR):
-            os.makedirs(CONFIG_DIR)
+        os.makedirs(CONFIG_DIR, exist_ok=True)
         data = {
             "port": self.target_port,
             "duration": self.duration,
@@ -105,28 +104,39 @@ class GlobalState:
         """Loads the configuration from a JSON file."""
         if not os.path.exists(CONFIG_FILE):
             return
+
         try:
             with open(CONFIG_FILE, 'r') as f:
                 data = json.load(f)
-                self.target_port = data.get("port", "2050")
-                self.duration = float(data.get("duration", 12.0))
-                self.lock_timer = data.get("lock_timer", True)
-                self.timer_pos = data.get("timer_pos", None)
-                h_type = data.get("hotkey_type", "mouse")
-                t_val = data.get("trigger_val", "Button.middle")
-                self.hotkey_type = h_type
-                if h_type == "mouse":
-                    btn_name = t_val.split('.')[-1]
-                    self.trigger_btn = getattr(mouse.Button, btn_name, mouse.Button.middle)
-                else:
-                    if "Key." in t_val:
-                        key_name = t_val.split('.')[-1]
-                        self.trigger_btn = getattr(keyboard.Key, key_name, keyboard.Key.f2)
-                    else:
-                        self.trigger_btn = keyboard.KeyCode(char=t_val)
-                self.trigger_str = self.get_clean_trigger_str(self.trigger_btn, self.hotkey_type)
-        except Exception as e:
+        except (FileNotFoundError, json.JSONDecodeError) as e:
             logging.error(f"Error loading config: {e}")
+            return
+
+        self.target_port = data.get("port", "2050")
+        self.duration = float(data.get("duration", 12.0))
+        self.lock_timer = data.get("lock_timer", True)
+        self.timer_pos = data.get("timer_pos", None)
+        h_type = data.get("hotkey_type", "mouse")
+        t_val = data.get("trigger_val", "Button.middle")
+        self.hotkey_type = h_type
+
+        if h_type == "mouse":
+            try:
+                btn_name = t_val.split('.')[-1]
+                self.trigger_btn = getattr(mouse.Button, btn_name, mouse.Button.middle)
+            except AttributeError:
+                self.trigger_btn = mouse.Button.middle
+        else:
+            try:
+                if "Key." in t_val:
+                    key_name = t_val.split('.')[-1]
+                    self.trigger_btn = getattr(keyboard.Key, key_name, keyboard.Key.f2)
+                else:
+                    self.trigger_btn = keyboard.KeyCode(char=t_val)
+            except AttributeError:
+                self.trigger_btn = keyboard.Key.f2
+
+        self.trigger_str = self.get_clean_trigger_str(self.trigger_btn, self.hotkey_type)
 
 state = GlobalState()
 
@@ -213,6 +223,7 @@ def capture_worker():
 
         except OSError as e:
             logging.error(f"WinDivert OSError: {e}")
+            time.sleep(1)  # Add a small delay to prevent busy-looping on error
         except Exception as e:
             logging.error(f"Capture died: {e}")
             time.sleep(1)
@@ -309,9 +320,7 @@ def toggle_lag(source="unknown"):
         state.lag_start_time = time.perf_counter()
         state.lag_event.set()
     else:
-        state.lag_event.clear()
-        with state.buffer_cond:
-            state.buffer_cond.notify()
+        deactivate_lag()
 
 def deactivate_lag():
     """Deactivates the lag effect."""
@@ -346,18 +355,17 @@ def on_input_event(key_or_btn, device_type):
 
 def restart_input_listeners():
     """Restarts the mouse and keyboard listeners."""
-    if state.mouse_listener:
-        try:
-            state.mouse_listener.stop()
-            state.mouse_listener.join(0.1)
-        except Exception as e:
-            logging.error(f"Error stopping mouse listener: {e}")
-    if state.kb_listener:
-        try:
-            state.kb_listener.stop()
-            state.kb_listener.join(0.1)
-        except Exception as e:
-            logging.error(f"Error stopping kb listener: {e}")
+    def safe_stop(listener, listener_name):
+        if listener:
+            try:
+                listener.stop()
+                listener.join(0.1)
+            except Exception as e:
+                logging.error(f"Error stopping {listener_name} listener: {e}")
+
+    safe_stop(state.mouse_listener, "mouse")
+    safe_stop(state.kb_listener, "keyboard")
+
     time.sleep(0.1)
     state.mouse_listener = mouse.Listener(on_click=on_mouse_click)
     state.mouse_listener.start()
@@ -553,12 +561,9 @@ class ClumsexGUI(tk.Tk):
         """Starts background threads and optimizes system settings."""
         optimize_system()
         restart_input_listeners()
-        self.t_net = threading.Thread(target=capture_worker, daemon=True)
-        self.t_net.start()
-        self.t_flush = threading.Thread(target=flush_worker, daemon=True)
-        self.t_flush.start()
-        self.t_watch = threading.Thread(target=watchdog_worker, daemon=True)
-        self.t_watch.start()
+        threading.Thread(target=capture_worker, daemon=True).start()
+        threading.Thread(target=flush_worker, daemon=True).start()
+        threading.Thread(target=watchdog_worker, daemon=True).start()
 
     def create_widgets(self):
         """Creates and lays out the GUI widgets."""
@@ -615,8 +620,7 @@ class ClumsexGUI(tk.Tk):
 
     def update_loop(self):
         """Updates the GUI elements in a loop."""
-        with state.lock:
-            active_now = state.lag_event.is_set()
+        active_now = state.lag_event.is_set()
 
         self.overlay.update_view()
 
@@ -633,13 +637,12 @@ class ClumsexGUI(tk.Tk):
         self.canvas_ind.coords(self.ind_rect, 0, 0, w, 50)
         self.canvas_ind.coords(self.ind_text, w/2, 23)
 
-        with state.lock:
-            if state.current_ip != self._last_ip_text:
-                self.var_ip.set(state.current_ip)
-                self._last_ip_text = state.current_ip
-            if state.last_ip != self._last_prev_ip_text:
-                self.var_last_ip.set(state.last_ip)
-                self._last_prev_ip_text = state.last_ip
+        if state.current_ip != self._last_ip_text:
+            self.var_ip.set(state.current_ip)
+            self._last_ip_text = state.current_ip
+        if state.last_ip != self._last_prev_ip_text:
+            self.var_last_ip.set(state.last_ip)
+            self._last_prev_ip_text = state.last_ip
 
         display_text = "Press Key..." if state.remap_mode else state.trigger_str
         if display_text != self._last_btn_text:
@@ -661,6 +664,8 @@ class ClumsexGUI(tk.Tk):
             state.target_port = self.var_port.get()
             state.duration = float(self.var_duration.get())
             state.save_config()
+        except ValueError:
+            logging.error("Invalid port or duration value.")
         except Exception as e:
             logging.error(f"Error updating config: {e}")
 
@@ -681,21 +686,23 @@ class ClumsexGUI(tk.Tk):
     def on_close_x(self):
         """Handles the window close event."""
         state.app_running = False
-        if state.mouse_listener:
-            try:
-                state.mouse_listener.stop()
-            except Exception as e:
-                logging.error(f"Error stopping mouse listener on close: {e}")
-        if state.kb_listener:
-            try:
-                state.kb_listener.stop()
-            except Exception as e:
-                logging.error(f"Error stopping kb listener on close: {e}")
+
+        def safe_stop(listener, listener_name):
+            if listener:
+                try:
+                    listener.stop()
+                except Exception as e:
+                    logging.error(f"Error stopping {listener_name} listener on close: {e}")
+
+        safe_stop(state.mouse_listener, "mouse")
+        safe_stop(state.kb_listener, "keyboard")
+
         if state.divert:
             try:
                 state.divert.close()
             except Exception as e:
                 logging.error(f"Error closing divert on close: {e}")
+
         if self.tray_icon:
             self.tray_icon.stop()
 
@@ -712,19 +719,18 @@ class ClumsexGUI(tk.Tk):
         image_file = resource_path("icon_on.png") if color_str == "#00cc00" else resource_path("icon_off.png")
         try:
             return Image.open(image_file)
+        except FileNotFoundError:
+            logging.error(f"Tray icon file not found: {image_file}")
+            image = Image.new('RGB', (64, 64), (0, 0, 0))
+            d = ImageDraw.Draw(image)
+            d.rectangle([10, 10, 54, 54], fill=color_str)
+            return image
         except Exception as e:
             logging.error(f"Error loading tray icon: {e}")
             image = Image.new('RGB', (64, 64), (0, 0, 0))
             d = ImageDraw.Draw(image)
             d.rectangle([10, 10, 54, 54], fill=color_str)
             return image
-
-    def show_tray(self):
-        """Shows the tray icon."""
-        if self.tray_icon:
-            return
-        initial_color = "#00cc00" if state.lag_event.is_set() else "#cc0000"
-        self.last_icon_color
 
 if __name__ == "__main__":
     app = ClumsexGUI()
