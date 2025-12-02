@@ -66,3 +66,6 @@ Se corrigió un error de sintaxis en la clase `GlobalState`. La variable `self.g
 Se implementaron dos cambios principales en la clase `OverlayTimer`:
 1.  **Prevención de arrastre al estar bloqueado:** Se añadió un chequeo `if state.lock_timer: return` al inicio de los métodos `click_win`, `drag_win` y `release_win`. Esto asegura que el timer solo pueda ser arrastrado si la opción "Lock Timer Position" está desactivada en la GUI principal.
 2.  **Visibilidad condicionada a la ventana del juego:** Se modificó la lógica de la variable `is_visible` en el método `update_view`. Ahora, la visibilidad del timer no solo depende de `state.lock_timer` o `state.lag_event.is_set()`, sino que también requiere que la ventana `RotMGExalt` esté presente. Se usa `ctypes.windll.user32.FindWindowW` para verificar su existencia, y el timer se oculta (`withdraw()`) si la ventana del juego no se encuentra, incluso si la opción de bloqueo está desactivada o el lag está activo.
+
+## 🕒 2025-12-02 21:46:06
+El código ha sido optimizado eliminando comentarios y docstrings, reduciendo el espacio utilizado. No se ha modificado la lógica funcional.

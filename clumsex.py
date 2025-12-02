@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 21:39:30 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 21:46:06 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -64,22 +64,16 @@ class GlobalState:
     def get_clean_trigger_str(self, key_obj, k_type):
         if k_type == "mouse":
             return str(key_obj).replace("Button.", "").capitalize() + " Click"
-        else:
-            try:
-                return key_obj.char.upper() if hasattr(key_obj, 'char') else str(key_obj).replace("Key.", "").upper()
-            except AttributeError:
-                return str(key_obj).replace("Key.", "").upper()
+        try:
+            return key_obj.char.upper() if hasattr(key_obj, 'char') else str(key_obj).replace("Key.", "").upper()
+        except AttributeError:
+            return str(key_obj).replace("Key.", "").upper()
 
     def save_config(self):
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        data = {
-            "port": self.target_port,
-            "duration": self.duration,
-            "lock_timer": self.lock_timer,
-            "timer_pos": self.timer_pos,
-            "hotkey_type": self.hotkey_type,
-            "trigger_val": str(self.trigger_btn).replace("'", "")
-        }
+        data = {"port": self.target_port, "duration": self.duration, "lock_timer": self.lock_timer,
+                "timer_pos": self.timer_pos, "hotkey_type": self.hotkey_type,
+                "trigger_val": str(self.trigger_btn).replace("'", "")}
         try:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, indent=4)
