@@ -46,3 +46,13 @@ jobs:
           git pull --rebase origin main
           
           git push origin HEAD:main
+
+      - name: Notificar a Discord
+        if: success() # Solo se ejecuta si todo lo anterior salió bien
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🚀 Gemini Bot: ¡Update Exitoso!"
+          description: "Se ha optimizado el código y actualizado el Changelog."
+          color: 0x00FF00 # Verde Hacker
+          username: Gemini Bot
