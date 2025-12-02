@@ -12,18 +12,18 @@ jobs:
     permissions:
       contents: write
       
-steps:
-      - name: Checkout
+    steps:
+      - name: Checkout del Repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Libs
+      - name: Instalar Librería de Google
         run: pip install google-genai
 
       # El script ahora maneja sus propios reintentos internamente
@@ -32,7 +32,7 @@ steps:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python review_bot.py
 
-      - name: Commit y Push
+      - name: Commit y Push Robusto
         run: |
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
@@ -41,14 +41,14 @@ steps:
           
           git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios"
           
-          # Estrategia de fusión segura
+          # Estrategia de fusión segura (gana lo que esté en GitHub si hay conflicto)
           git pull --no-rebase -s recursive -X ours origin main
           
           git push origin HEAD:main
 
-      # === NOTIFICACIÓN DISCORD (RESTAURADA) ===
+      # === NOTIFICACIÓN DISCORD ===
       - name: Notificar a Discord
-        if: success() # Solo si todo lo anterior salió bien
+        if: success() 
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
