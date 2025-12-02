@@ -34,19 +34,15 @@ jobs:
 
       - name: Commit y Push Robusto
         run: |
-          # 1. Configurar identidad
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
           
-          # 2. Agregar código y logs
+          # Agrega tanto el código como el historial
           git add -f clumsex.py CHANGELOG.md
           
-          # 3. Commit
-          git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios para commitear"
+          git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios"
           
-          # 4. === EL SALVAVIDAS: Sincronizar antes de subir ===
-          # Este comando arregla el error "rejected" que te acaba de salir
+          # ESTA LÍNEA ES LA QUE ARREGLA TU ERROR ACTUAL
           git pull --rebase origin main
           
-          # 5. Push final
           git push origin HEAD:main
