@@ -1,0 +1,34 @@
+name: 'Revisor de Código Recurrente'
+
+on:
+  # Disparador de tiempo: Corre cada 10 minutos
+  schedule:
+    # La sintaxis de cron es 'minuto hora dia_mes mes dia_semana'
+    # */10 * * * * significa 'cada 10 minutos'
+    - cron: '*/10 * * * *' 
+  
+  # Disparador manual para pruebas
+  workflow_dispatch:
+
+jobs:
+  auto_review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del Repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Instalar Dependencias
+        run: |
+          pip install google-genai
+
+      - name: Ejecutar Bot de Revisión
+        run: python review_bot.py
+        env:
+          # Inyecta la clave API desde GitHub Secrets
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+feat: Añadir workflow de revisión automática
