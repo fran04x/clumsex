@@ -1,18 +1,17 @@
 import os
 import datetime
-import subprocess
 import sys
 from google import genai
 
 # --- CONFIGURACIÓN ---
 FILE_CODE = "clumsex.py"
 FILE_LOG = "CHANGELOG.md"
+FILE_TODO = "TODO.md"
 SEPARATOR = "___LOG_SECTION___"
-MAX_RETRIES = 3  # Vidas del bot
+MAX_RETRIES = 3
 # ---------------------
 
 def clean_code_part(code_text):
-    """Limpia fences de markdown."""
     lines = code_text.strip().split('\n')
     if lines and lines[0].strip().startswith('```'):
         lines = lines[1:]
@@ -21,22 +20,38 @@ def clean_code_part(code_text):
     return '\n'.join(lines).strip()
 
 def ensure_execution_block(code_content):
-    """Garantiza que el script tenga arranque."""
     if 'if __name__ == "__main__":' not in code_content and "if __name__ == '__main__':" not in code_content:
         code_content += '\n\nif __name__ == "__main__":\n    app = ClumsexGUI()\n    app.mainloop()'
     return code_content
 
 def check_syntax(code_string):
-    """
-    Intenta compilar el código en memoria para ver si tiene errores.
-    Retorna: (True, "") si está bien.
-    Retorna: (False, "Error msg") si falla.
-    """
     try:
         compile(code_string, '<string>', 'exec')
         return True, ""
     except Exception as e:
         return False, str(e)
+
+def get_next_task():
+    """Lee el TODO.md y extrae la primera tarea pendiente."""
+    if not os.path.exists(FILE_TODO):
+        return None, []
+    
+    with open(FILE_TODO, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    
+    task = None
+    remaining_lines = []
+    
+    # Busca la primera línea que empiece con guión o checkbox vacío
+    for i, line in enumerate(lines):
+        clean_line = line.strip()
+        # Detecta formatos: "- Tarea", "- [ ] Tarea", "* Tarea"
+        if not task and (clean_line.startswith("- [ ]") or (clean_line.startswith("- ") and "[x]" not in clean_line)):
+            task = clean_line.replace("- [ ]", "").replace("- ", "").strip()
+        else:
+            remaining_lines.append(line)
+            
+    return task, remaining_lines
 
 def run_review():
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -48,56 +63,65 @@ def run_review():
         print(f"Error: No encuentro {FILE_CODE}")
         return
 
-    # Leemos el código ORIGINAL (la base estable)
+    # 1. Obtener la misión del TODO.md
+    current_task, remaining_todo_lines = get_next_task()
+    
+    if current_task:
+        print(f"📋 Misión detectada: {current_task}")
+        mission_prompt = f"TU MISIÓN PRIORITARIA: Implementar esta tarea: '{current_task}'."
+    else:
+        print("💤 No hay tareas en TODO.md. Modo Mantenimiento (Optimización).")
+        mission_prompt = "TU MISIÓN: Analizar el código, buscar bugs o mejoras de rendimiento y aplicarlas."
+
+    # Leer código actual
     with open(FILE_CODE, "r", encoding="utf-8") as f:
         current_code = f.read()
 
     client = genai.Client(api_key=api_key)
-    
-    # Historial de intentos para este ciclo
     attempt = 0
-    # El prompt inicial es optimizar
-    current_prompt = f"""
-    Actúa como experto en Python. Optimiza este script manteniendo funcionalidad.
-    NO ELIMINES FUNCIONES. Asegura el bloque `if __name__ == "__main__":` al final.
     
-    Formato de respuesta:
+    # Prompt Base
+    current_prompt_text = f"""
+    Actúa como experto en Python. {mission_prompt}
+    
+    REGLAS:
+    1. NO ELIMINES FUNCIONES EXISTENTES a menos que la tarea lo pida.
+    2. Asegura el bloque `if __name__ == "__main__":` al final.
+    3. Devuelve el código completo.
+    
+    Formato:
     [CÓDIGO]
     {SEPARATOR}
-    [LOG]
+    [LOG EXPLICATIVO]
     
-    --- CÓDIGO ---
+    --- CÓDIGO ACTUAL ---
     {current_code}
     """
 
     while attempt < MAX_RETRIES:
         attempt += 1
-        print(f"🔄 Intento de generación {attempt}/{MAX_RETRIES}...")
+        print(f"🔄 Intento {attempt}/{MAX_RETRIES}...")
 
         try:
-            response = client.models.generate_content(model='gemini-2.0-flash', contents=current_prompt)
+            response = client.models.generate_content(model='gemini-2.0-flash', contents=current_prompt_text)
             full_text = response.text
             
-            # Separar código y log
             if SEPARATOR in full_text:
                 parts = full_text.split(SEPARATOR)
                 raw_code = parts[0]
                 log_text = parts[1].strip()
             else:
                 raw_code = full_text
-                log_text = "Actualización automática."
+                log_text = f"Tarea completada: {current_task}" if current_task else "Optimización general."
 
-            # Limpiar y asegurar arranque
             candidate_code = clean_code_part(raw_code)
             candidate_code = ensure_execution_block(candidate_code)
 
-            # === LA MAGIA: AUTO-CURACIÓN ===
+            # Auto-curación de sintaxis
             is_valid, error_msg = check_syntax(candidate_code)
             
             if is_valid:
-                print("✅ Código válido generado. Guardando...")
-                
-                # Timestamp y Guardado
+                # --- GUARDADO ---
                 ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 watermark = f"# --- AUTO-UPDATED: {ahora} UTC ---"
                 
@@ -111,31 +135,27 @@ def run_review():
                 with open(FILE_CODE, "w", encoding="utf-8") as f:
                     f.write(final_content)
 
+                # Log
+                log_prefix = f"✅ **TAREA COMPLETADA:** {current_task}\n" if current_task else ""
                 with open(FILE_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"\n\n## 🕒 Versión {ahora}\n{log_text}")
+                    f.write(f"\n\n## 🕒 Versión {ahora}\n{log_prefix}{log_text}")
                 
-                return # ¡ÉXITO! Salimos del loop
+                # Actualizar TODO.md (Borrar la tarea hecha)
+                if current_task:
+                    with open(FILE_TODO, "w", encoding="utf-8") as f:
+                        f.writelines(remaining_todo_lines)
+                    print("🗑️ Tarea eliminada del archivo TODO.")
+
+                return
 
             else:
-                print(f"❌ Gemini falló. Error detectado: {error_msg}")
-                # === AQUÍ ESTÁ TU IDEA ===
-                # En lugar de empezar de cero, le damos el error para que se corrija a sí mismo
-                current_prompt = f"""
-                El código que generaste tiene un error de sintaxis y NO se puede ejecutar.
-                
-                ERROR DETECTADO:
-                {error_msg}
-                
-                Por favor, corrige el código anterior basándote en este error.
-                Devuelve el código COMPLETO corregido nuevamente con el mismo formato.
-                """
-                # El loop continúa... Gemini recibirá este nuevo prompt en el siguiente giro
+                print(f"❌ Error sintaxis: {error_msg}")
+                current_prompt_text = f"El código tiene error: {error_msg}. Corrígelo y devuélvelo completo."
 
         except Exception as e:
-            print(f"Error de API: {e}")
+            print(f"Error API: {e}")
     
-    print("⛔ Se agotaron los intentos. No se aplicaron cambios.")
-    sys.exit(1) # Fallar el workflow si no se logró nada
+    sys.exit(1)
 
 if __name__ == "__main__":
     run_review()
