@@ -60,3 +60,9 @@ Optimización general
 ## 🕒 2025-12-02 21:37:48
 ✅ **Tarea:** Corrige un error de sintaxis en el codigo donde se busca el ejecutable "RotMG Exalt" pero en realidad se llama "RotMGExalt".
 Se corrigió un error de sintaxis en la clase `GlobalState`. La variable `self.game_window_title` se cambió de `"RotMG Exalt"` a `"RotMGExalt"` para que coincida con el nombre real del ejecutable. Adicionalmente, se eliminaron todos los comentarios y docstrings según las instrucciones, y se ajustó el formato para mantener la legibilidad y la compacidad.
+
+## 🕒 2025-12-02 21:39:30
+✅ **Tarea:** Corrige un error que causa que el timer se pueda arrastrar aun teniendo la opcion bloqueada desde la ventana principal de clumsex. (Creo que solo aparece cuando la ventana RotMGExalt no está presente) tambien elimina la posibilidad de que aparezca el timer cuando la ventana RotMGExalt.exe no está presente.
+Se implementaron dos cambios principales en la clase `OverlayTimer`:
+1.  **Prevención de arrastre al estar bloqueado:** Se añadió un chequeo `if state.lock_timer: return` al inicio de los métodos `click_win`, `drag_win` y `release_win`. Esto asegura que el timer solo pueda ser arrastrado si la opción "Lock Timer Position" está desactivada en la GUI principal.
+2.  **Visibilidad condicionada a la ventana del juego:** Se modificó la lógica de la variable `is_visible` en el método `update_view`. Ahora, la visibilidad del timer no solo depende de `state.lock_timer` o `state.lag_event.is_set()`, sino que también requiere que la ventana `RotMGExalt` esté presente. Se usa `ctypes.windll.user32.FindWindowW` para verificar su existencia, y el timer se oculta (`withdraw()`) si la ventana del juego no se encuentra, incluso si la opción de bloqueo está desactivada o el lag está activo.

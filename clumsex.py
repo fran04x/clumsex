@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 21:37:48 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 21:39:30 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -339,15 +339,21 @@ class OverlayTimer(tk.Toplevel):
         self.geometry(f"{self.width}x{self.height}+{x}+{y}")
 
     def click_win(self, event):
+        if state.lock_timer:
+            return
         self._offsetx = event.x
         self._offsety = event.y
 
     def drag_win(self, event):
+        if state.lock_timer:
+            return
         x = self.winfo_x() + (event.x - self._offsetx)
         y = self.winfo_y() + (event.y - self._offsety)
         self.geometry(f"+{x}+{y}")
 
     def release_win(self, event):
+        if state.lock_timer:
+            return
         state.timer_pos = (self.winfo_x(), self.winfo_y())
         state.save_config()
 
@@ -362,7 +368,9 @@ class OverlayTimer(tk.Toplevel):
             logging.debug(f"Error updating click through: %s", e)
 
     def update_view(self):
-        is_visible = (not state.lock_timer) or state.lag_event.is_set()
+        hwnd_target = ctypes.windll.user32.FindWindowW(None, state.game_window_title)
+        should_be_visible_logic = (not state.lock_timer) or state.lag_event.is_set()
+        is_visible = should_be_visible_logic and bool(hwnd_target)
         if is_visible != self._last_visible:
             getattr(self, "deiconify" if is_visible else "withdraw")()
             if is_visible:
@@ -385,7 +393,6 @@ class OverlayTimer(tk.Toplevel):
             if self.track_counter >= 8:
                 self.track_counter = 0
                 try:
-                    hwnd_target = ctypes.windll.user32.FindWindowW(None, state.game_window_title)
                     if hwnd_target:
                         rect = RECT()
                         ctypes.windll.user32.GetWindowRect(hwnd_target, ctypes.byref(rect))
