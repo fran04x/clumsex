@@ -26,7 +26,7 @@ jobs:
       - name: Instalar Librería de Google
         run: pip install google-genai
 
-      # === GENERACIÓN CON 3 VIDAS (Auto-corrección de sintaxis) ===
+      # === GENERACIÓN CON 3 VIDAS (Auto-corrección) ===
       - name: Generar Código Seguro
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -35,15 +35,12 @@ jobs:
           count=0
           success=false
           
-          # Loop de reintentos
           while [ $count -lt $MAX_RETRIES ]; do
             count=$((count+1))
             echo "🔄 Intento $count de $MAX_RETRIES..."
             
-            # Ejecutar Bot
             python review_bot.py
             
-            # Verificar sintaxis
             if python -m py_compile clumsex.py; then
               echo "✅ Sintaxis válida."
               success=true
@@ -58,26 +55,31 @@ jobs:
           done
 
           if [ "$success" = false ]; then
-            echo "⛔ Fallaron todos los intentos. Abortando."
+            echo "⛔ Fallaron todos los intentos."
             exit 1
           fi
 
-      - name: Commit y Push Robusto (Estrategia Merge)
+      - name: Commit y Push Robusto
         run: |
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
           
-          # Agregamos los archivos
           git add -f clumsex.py CHANGELOG.md
           
-          # Hacemos commit local
           git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios"
           
-          # === CAMBIO IMPORTANTE AQUI ===
-          # Usamos --no-rebase para crear un MERGE si hay conflicto.
-          # -s recursive -X ours: Si hay conflicto IMPOSIBLE de resolver,
-          # da prioridad a lo que haya en GitHub (tu cambio manual) para no romper nada.
+          # Estrategia de fusión segura
           git pull --no-rebase -s recursive -X ours origin main
           
-          # Subimos el resultado fusionado
           git push origin HEAD:main
+
+      # === NOTIFICACIÓN DISCORD (RESTAURADA) ===
+      - name: Notificar a Discord
+        if: success() # Solo si todo lo anterior salió bien
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🚀 Gemini Bot: ¡Update Exitoso!"
+          description: "Se ha optimizado el código y actualizado el Changelog."
+          color: 0x00FF00
+          username: Gemini Bot
