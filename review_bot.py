@@ -22,7 +22,6 @@ def run_review():
 
     if not os.path.exists(NOMBRE_ARCHIVO_CODIGO):
         print(f"ERROR: No encuentro '{NOMBRE_ARCHIVO_CODIGO}' en el directorio actual.")
-        # Ayuda visual para debugging
         print("Archivos disponibles:", os.listdir())
         return
 
@@ -45,7 +44,7 @@ def run_review():
         
         code_limpio = clean_gemini_response(response.text)
         
-        # Marca de tiempo para forzar el commit
+        # Timestamp
         ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         watermark = f"# --- AUTO-UPDATED: {ahora} UTC ---"
         
