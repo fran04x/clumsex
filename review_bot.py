@@ -98,9 +98,10 @@ def run_review():
     Actúa como experto en Python Senior. {mission}
     
     IMPORTANTE:
-    1. Mantén la lógica existente, solo modifica lo necesario para la tarea.
-    2. El código es largo, NO LO CORTES. Devuelve el script COMPLETO.
-    3. Si agregas UI, usa Tkinter compatible.
+    1. El código es muy largo. PARA AHORRAR ESPACIO: ELIMINA TODOS LOS COMENTARIOS Y DOCSTRINGS.
+    2. Mantén el código compacto pero legible.
+    3. NO ELIMINES NINGUNA FUNCIÓN LÓGICA.
+    4. Asegura el bloque `if __name__ == "__main__":` al final.
     
     Formato OBLIGATORIO de respuesta:
     ```python
