@@ -56,3 +56,7 @@ Update: Optimizar la funcion flush_worker para usar menos memoria.
 
 ## 🕒 2025-12-02 20:53:25
 Optimización general
+
+## 🕒 2025-12-02 21:37:48
+✅ **Tarea:** Corrige un error de sintaxis en el codigo donde se busca el ejecutable "RotMG Exalt" pero en realidad se llama "RotMGExalt".
+Se corrigió un error de sintaxis en la clase `GlobalState`. La variable `self.game_window_title` se cambió de `"RotMG Exalt"` a `"RotMGExalt"` para que coincida con el nombre real del ejecutable. Adicionalmente, se eliminaron todos los comentarios y docstrings según las instrucciones, y se ajustó el formato para mantener la legibilidad y la compacidad.
