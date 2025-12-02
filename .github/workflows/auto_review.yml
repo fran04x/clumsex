@@ -2,17 +2,13 @@ name: 'Actualizador Clumsex (10 min)'
 
 on:
   schedule:
-    # Ejecución cada 10 minutos (144/día) para no saturar la API gratuita
     - cron: '*/10 * * * *'
-  
-  # Botón manual para pruebas inmediatas
   workflow_dispatch:
 
 jobs:
   auto_update:
     runs-on: ubuntu-latest
     
-    # Permisos vitales para poder escribir en el repositorio
     permissions:
       contents: write
       
@@ -29,28 +25,30 @@ jobs:
         run: pip install google-genai
 
       - name: Ejecutar Bot de Actualización
-        # Lee clumsex.py, consulta a Gemini y sobrescribe el archivo localmente
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python review_bot.py
 
-      # === FILTRO DE SEGURIDAD (Safety Check) ===
-      - name: Verificar Sintaxis Python
-        # Si Gemini cometió un error grave (paréntesis, indentación), 
-        # este paso falla y CANCELA la subida para proteger tu repo.
+      - name: Verificar Sintaxis Python (Safety Check)
         run: python -m py_compile clumsex.py
 
-      - name: Commit y Push
+      - name: Commit y Push Robusto
         run: |
-          # 1. Configurar identidad del bot
+          # 1. Configurar identidad
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
           
-          # 2. Agregar el archivo modificado
-          git add clumsex.py CHANGELOG.md
+          # 2. Agregar código y logs
+          # (El -f asegura que se agreguen incluso si git los ignora por error)
+          git add -f clumsex.py CHANGELOG.md
           
           # 3. Commit
-          git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios."
+          git commit -m "chore: [AUTO-UPDATE] Código + Changelog" || echo "⚠️ Sin cambios para commitear"
           
-          # 4. Push explícito a la rama principal
+          # 4. === FIX CRÍTICO: Sincronizar antes de subir ===
+          # Esto descarga tus cambios manuales (como haber creado el changelog)
+          # y aplica los cambios del bot ENCIMA. Evita el error "rejected".
+          git pull --rebase origin main
+          
+          # 5. Push final
           git push origin HEAD:main
