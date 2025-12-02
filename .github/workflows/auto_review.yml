@@ -1,47 +1,56 @@
-name: 'Actualizador Clumsex (clumsex.py)'
+name: 'Actualizador Clumsex (10 min)'
 
 on:
   schedule:
+    # Ejecución cada 10 minutos (144/día) para no saturar la API gratuita
     - cron: '*/10 * * * *'
+  
+  # Botón manual para pruebas inmediatas
   workflow_dispatch:
 
 jobs:
   auto_update:
     runs-on: ubuntu-latest
     
+    # Permisos vitales para poder escribir en el repositorio
     permissions:
       contents: write
       
     steps:
-      - name: Checkout
+      - name: Checkout del Repositorio
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Libs
+      - name: Instalar Librería de Google
         run: pip install google-genai
 
-      - name: Run Bot (Gemini)
+      - name: Ejecutar Bot de Actualización
+        # Lee clumsex.py, consulta a Gemini y sobrescribe el archivo localmente
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python review_bot.py
 
-      - name: Commit & Push
+      # === FILTRO DE SEGURIDAD (Safety Check) ===
+      - name: Verificar Sintaxis Python
+        # Si Gemini cometió un error grave (paréntesis, indentación), 
+        # este paso falla y CANCELA la subida para proteger tu repo.
+        run: python -m py_compile clumsex.py
+
+      - name: Commit y Push
         run: |
-          # Configuración de identidad
+          # 1. Configurar identidad del bot
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
           
-          # Verificar estado antes
-          echo "Estado previo:"
-          git status
-          
-          # Agregar el archivo (ahora sin comillas complicadas)
+          # 2. Agregar el archivo modificado
           git add clumsex.py
           
-          # Commit y Push
-          git commit -m "chore: [AUTO-UPDATE] Nueva versión optimizada" || echo "Sin cambios para subir"
-          git push
+          # 3. Commit (El timestamp asegura que siempre haya cambios)
+          git commit -m "chore: [AUTO-UPDATE] Nueva versión optimizada por Gemini" || echo "⚠️ Aviso: No hubo cambios detectados."
+          
+          # 4. Push explícito a la rama principal
+          git push origin HEAD:main
