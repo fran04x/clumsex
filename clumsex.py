@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 21:46:06 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 21:52:16 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -18,8 +18,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RECT(ctypes.Structure):
-    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
 
 def resource_path(relative_path):
     try:
