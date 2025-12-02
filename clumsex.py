@@ -1,3 +1,4 @@
+# --- AUTO-UPDATED: 2025-12-02 18:48:20 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -20,7 +21,7 @@ class RECT(ctypes.Structure):
 
 def resource_path(relative_path):
     try: base_path = sys._MEIPASS
-    except: base_path = os.path.abspath(".")
+    except AttributeError: base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
 APP_NAME = "clumsex"
@@ -71,6 +72,7 @@ class GlobalState:
             return str(key_obj).replace("Button.", "").capitalize() + " Click"
         else:
             try: return key_obj.char.upper()
+            except AttributeError: return str(key_obj).replace("Key.", "").upper()
             except: return str(key_obj).replace("Key.", "").upper()
 
     def save_config(self):
@@ -86,7 +88,7 @@ class GlobalState:
         }
         try:
             with open(CONFIG_FILE, 'w') as f: json.dump(data, f, indent=4)
-        except: pass
+        except Exception: pass
 
     def load_config(self):
         if not os.path.exists(CONFIG_FILE): return
@@ -110,7 +112,7 @@ class GlobalState:
                     else:
                         self.trigger_btn = keyboard.KeyCode(char=t_val)
                 self.trigger_str = self.get_clean_trigger_str(self.trigger_btn, self.hotkey_type)
-        except: pass
+        except Exception: pass
 
 state = GlobalState()
 
@@ -122,21 +124,15 @@ def optimize_system():
         handle = ctypes.windll.kernel32.OpenProcess(0x1F0FFF, False, pid)
         # Prioridad NORMAL para evitar starvation en CPUs débiles
         ctypes.windll.kernel32.SetPriorityClass(handle, 0x00000020)
-        
-        # [Fix #1] AFINIDAD ELIMINADA: Dejar que Windows distribuya carga
-        # cpu_count = os.cpu_count()
-        # if cpu_count and cpu_count > 1:
-        #     mask = 1 << (cpu_count - 1)
-        #     ctypes.windll.kernel32.SetProcessAffinityMask(handle, mask)
             
         ctypes.windll.kernel32.CloseHandle(handle)
         ctypes.windll.winmm.timeBeginPeriod(1)
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('clumsex.v12.2')
-    except: pass
+    except Exception: pass
 
 def restore_system():
     try: ctypes.windll.winmm.timeEndPeriod(1)
-    except: pass
+    except Exception: pass
 
 def restore_gc():
     with state.gc_lock:
@@ -281,7 +277,7 @@ def flush_worker():
                     pkt.direction = direction
                     send_func(pkt)
                     tokens -= 1.0
-                except: pass
+                except Exception: pass
                 
                 if not queue:
                     restore_gc()
@@ -345,10 +341,10 @@ def on_input_event(key_or_btn, device_type):
 def restart_input_listeners():
     if state.mouse_listener:
         try: state.mouse_listener.stop(); state.mouse_listener.join(0.1) 
-        except: pass
+        except Exception: pass
     if state.kb_listener:
         try: state.kb_listener.stop(); state.kb_listener.join(0.1)
-        except: pass
+        except Exception: pass
     time.sleep(0.1)
     state.mouse_listener = mouse.Listener(on_click=on_mouse_click)
     state.mouse_listener.start()
@@ -421,7 +417,7 @@ class OverlayTimer(tk.Toplevel):
                 style = style & ~0x20 | 0x80000
                 self.lbl_time.config(cursor="fleur")
             ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
-        except: pass
+        except Exception: pass
 
     def update_view(self):
         is_visible = (not state.lock_timer) or state.lag_event.is_set()
@@ -471,7 +467,7 @@ class OverlayTimer(tk.Toplevel):
                             cx, cy = int(curr_geo[1]), int(curr_geo[2])
                             if abs(cx - new_x) > 2 or abs(cy - new_y) > 2:
                                 self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
-                except: pass
+                except Exception: pass
 
 # --- GUI PRINCIPAL ---
 class ClumsexGUI(tk.Tk):
@@ -481,7 +477,7 @@ class ClumsexGUI(tk.Tk):
         self.geometry("240x390") 
         self.resizable(False, False)
         try: self.iconbitmap(resource_path("clumsex.ico"))
-        except: pass
+        except Exception: pass
         
         self.protocol("WM_DELETE_WINDOW", self.on_close_x)
         self.bind("<Map>", self.on_window_state_change)
@@ -626,7 +622,7 @@ class ClumsexGUI(tk.Tk):
             state.target_port = self.var_port.get()
             state.duration = float(self.var_duration.get())
             state.save_config()
-        except: pass
+        except Exception: pass
 
     def copy_ip(self):
         self.clipboard_clear()
@@ -642,13 +638,13 @@ class ClumsexGUI(tk.Tk):
         state.app_running = False
         if state.mouse_listener:
             try: state.mouse_listener.stop()
-            except: pass
+            except Exception: pass
         if state.kb_listener:
             try: state.kb_listener.stop()
-            except: pass
+            except Exception: pass
         if state.divert:
             try: state.divert.close()
-            except: pass
+            except Exception: pass
         if self.tray_icon: self.tray_icon.stop()
         
         # Wake up workers to exit loops
@@ -661,10 +657,9 @@ class ClumsexGUI(tk.Tk):
         os._exit(0)
 
     def create_tray_image(self, color_str):
-        if color_str == "#00cc00": image_file = resource_path("icon_on.png")
-        else: image_file = resource_path("icon_off.png")
+        image_file = resource_path("icon_on.png") if color_str == "#00cc00" else resource_path("icon_off.png")
         try: return Image.open(image_file)
-        except:
+        except Exception:
             image = Image.new('RGB', (64, 64), (0, 0, 0))
             d = ImageDraw.Draw(image)
             d.rectangle([10, 10, 54, 54], fill=color_str)

@@ -18,3 +18,9 @@ Este documento registra la evolución del proyecto. Las entradas inferiores son 
 
 ## 🕒 Versión 2025-12-02 18:32:57
 Actualización automática (Sin detalles generados).
+
+## 🕒 Versión 2025-12-02 18:48:20
+- **Reemplacé `sys._MEIPASS` con `sys._MEIPASS` y `AttributeError`** para la detección del path en ejecutable compilado.
+- **Simplifiqué el condicional de la imagen del ícono del tray** en `create_tray_image` para hacerlo más conciso.
+- **Unifiqué el manejo de excepciones** para hacer el código más legible y evitar repeticiones. Donde antes había `except:` ahora hay `except Exception:`.
+- **Eliminé `finally: state.
