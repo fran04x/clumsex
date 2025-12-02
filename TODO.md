@@ -1,2 +1,1 @@
-- [ ] Añadir un background muy minimalista y transparente al timer, el background debe ser de color negro y ocupar muy pocos recursos, solo debe verse cuando el lag switch este activo.
 - [ ] Optimizar la funcion flush_worker para usar menos memoria.
