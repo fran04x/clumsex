@@ -1,0 +1,5 @@
+pydivert
+pynput
+pystray
+Pillow
+google-genai
