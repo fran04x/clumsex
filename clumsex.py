@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 17:40:57 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 17:54:09 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -20,11 +20,14 @@ class RECT(ctypes.Structure):
                 ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
 
 def resource_path(relative_path):
+    """Gets the absolute path to a resource, handling both bundled and unbundled cases."""
     try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
-    except AttributeError:  # Use AttributeError for compatibility
+    except AttributeError:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
+
 
 APP_NAME = "clumsex"
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", APP_NAME)
@@ -32,6 +35,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # --- ESTADO GLOBAL ---
 class GlobalState:
+    """Manages global application state, including configuration, locks, and events."""
     def __init__(self):
         self.target_port = "2050"
         self.duration = 12.0
@@ -68,6 +72,7 @@ class GlobalState:
         self.load_config()
 
     def get_clean_trigger_str(self, key_obj, k_type):
+        """Formats a key/button object into a human-readable string."""
         if k_type == "mouse":
             return str(key_obj).replace("Button.", "").capitalize() + " Click"
         else:
@@ -79,6 +84,7 @@ class GlobalState:
                 return "Unknown Key"
 
     def save_config(self):
+        """Saves the application configuration to a JSON file."""
         if not os.path.exists(CONFIG_DIR):
             os.makedirs(CONFIG_DIR)
         trigger_val = str(self.trigger_btn).replace("'", "")
@@ -97,6 +103,7 @@ class GlobalState:
             print(f"Error saving config: {e}")
 
     def load_config(self):
+        """Loads the application configuration from a JSON file."""
         if not os.path.exists(CONFIG_FILE):
             return
         try:
@@ -135,6 +142,7 @@ state = GlobalState()
 
 # --- UTILS SISTEMA ---
 def optimize_system():
+    """Optimizes the system by setting process priority, DPI awareness, and timer resolution."""
     try:
         ctypes.windll.user32.SetProcessDPIAware()
         pid = os.getpid()
@@ -148,6 +156,7 @@ def optimize_system():
 
 
 def restore_system():
+    """Restores system settings, such as timer resolution."""
     try:
         ctypes.windll.winmm.timeEndPeriod(1)
     except Exception as e:
@@ -155,6 +164,7 @@ def restore_system():
 
 
 def restore_gc():
+    """Restores garbage collection if it was disabled."""
     with state.gc_lock:
         if state.gc_dirty:
             gc.enable()
@@ -163,6 +173,7 @@ def restore_gc():
 
 # --- WATCHDOG ---
 def watchdog_worker():
+    """Manages the lag duration and deactivates lag after the specified duration."""
     while state.app_running:
         if state.lag_event.wait():
             deadline = state.lag_start_time + state.duration
@@ -178,6 +189,7 @@ def watchdog_worker():
 
 # --- CAPTURE WORKER ---
 def capture_worker():
+    """Captures network packets using WinDivert and buffers them when lag is active."""
     active_port_filter = state.target_port
 
     while state.app_running:
@@ -223,6 +235,7 @@ def capture_worker():
 
 # --- FLUSH WORKER ---
 def flush_worker():
+    """Sends buffered packets at a controlled rate when lag is deactivated."""
     try:
         with pydivert.WinDivert("false") as w_inject:
             PacketCls = pydivert.Packet
@@ -288,6 +301,7 @@ def flush_worker():
 
 # --- CONTROL ---
 def toggle_lag(source="unknown"):
+    """Toggles lag on or off based on the current state."""
     if state.remap_mode:
         return
     now = time.time()
@@ -309,6 +323,7 @@ def toggle_lag(source="unknown"):
 
 
 def deactivate_lag():
+    """Deactivates lag and clears the packet buffer."""
     state.lag_event.clear()
     with state.buffer_cond:
         state.buffer_cond.notify_all() #Notify all waiting threads
@@ -316,6 +331,7 @@ def deactivate_lag():
 
 # --- INPUT SYSTEM ---
 def on_input_event(key_or_btn, device_type):
+    """Handles input events (mouse clicks or key presses) during remapping."""
     if device_type == "mouse":
         if key_or_btn == mouse.Button.left or key_or_btn == mouse.Button.right:
             return
@@ -341,6 +357,7 @@ def on_input_event(key_or_btn, device_type):
 
 
 def restart_input_listeners():
+    """Restarts the mouse and keyboard listeners."""
     if state.mouse_listener:
         try:
             state.mouse_listener.stop()
@@ -361,6 +378,7 @@ def restart_input_listeners():
 
 
 def on_mouse_click(x, y, button, pressed):
+    """Handles mouse click events."""
     if not pressed:
         return
     if state.remap_mode:
@@ -370,6 +388,7 @@ def on_mouse_click(x, y, button, pressed):
 
 
 def on_key_press(key):
+    """Handles key press events."""
     if state.remap_mode:
         on_input_event(key, "keyboard")
     elif state.hotkey_type == "keyboard" and key == state.trigger_btn:
@@ -378,6 +397,7 @@ def on_key_press(key):
 
 # --- OVERLAY ---
 class OverlayTimer(tk.Toplevel):
+    """Creates an overlay window to display the lag timer."""
     def __init__(self, master):
         super().__init__(master)
         self.overrideredirect(True)
@@ -408,19 +428,23 @@ class OverlayTimer(tk.Toplevel):
             self.geometry(f"{self.width}x{self.height}+-1000+-1000")
 
     def click_win(self, event):
+        """Handles mouse click on the overlay window."""
         self._offsetx = event.x
         self._offsety = event.y
 
     def drag_win(self, event):
+        """Handles dragging of the overlay window."""
         x = self.winfo_x() + (event.x - self._offsetx)
         y = self.winfo_y() + (event.y - self._offsety)
         self.geometry(f"+{x}+{y}")
 
     def release_win(self, event):
+        """Handles the release of the mouse button after dragging the overlay window."""
         state.timer_pos = (self.winfo_x(), self.winfo_y())
         state.save_config()
 
     def update_click_through(self):
+        """Makes the overlay click-through when locked."""
         try:
             hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
             style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
@@ -436,6 +460,7 @@ class OverlayTimer(tk.Toplevel):
 
 
     def update_view(self):
+        """Updates the overlay window's text and visibility based on the lag state."""
         is_lagging = state.lag_event.is_set()
         is_visible = (not state.lock_timer) or is_lagging
 
@@ -496,6 +521,7 @@ class OverlayTimer(tk.Toplevel):
 
 # --- GUI PRINCIPAL ---
 class ClumsexGUI(tk.Tk):
+    """Main GUI window for the application."""
     def __init__(self):
         super().__init__()
         self.title("clumsex")
@@ -546,6 +572,7 @@ class ClumsexGUI(tk.Tk):
         self.check_minimize_loop()
 
     def delayed_startup(self):
+        """Starts system optimization and background threads after a delay."""
         optimize_system()
         restart_input_listeners()
         self.t_net = threading.Thread(target=capture_worker, daemon=True)
@@ -556,6 +583,7 @@ class ClumsexGUI(tk.Tk):
         self.t_watch.start()
 
     def create_widgets(self):
+        """Creates the GUI widgets."""
         self.canvas_ind = tk.Canvas(self, height=45, bg="#cccccc", highlightthickness=0, cursor="hand2")
         self.canvas_ind.pack(side="bottom", fill="x")
         self.ind_rect = self.canvas_ind.create_rectangle(0, 0, 300, 50, fill="#cc0000", outline="")
@@ -614,11 +642,13 @@ class ClumsexGUI(tk.Tk):
         btn_remap.pack(fill="x", padx=10, pady=(0, 6))
 
     def toggle_lock(self):
+        """Toggles the timer lock state and updates the configuration."""
         state.lock_timer = self.var_lock.get()
         self.overlay.update_click_through()
         state.save_config()
 
     def update_loop(self):
+        """Main loop that updates the GUI and overlay."""
         # [FIX #2] Adaptive Polling para reducir CPU
         with state.lock:
             active_now = state.lag_event.is_set()
@@ -661,6 +691,7 @@ class ClumsexGUI(tk.Tk):
         self.after(next_delay, self.update_loop)
 
     def check_minimize_loop(self):
+        """Checks if the window is minimized and shows the tray icon."""
         # [FIX #3] Reduce polling de minimize de 200ms a 1000ms
         if self.state() == 'iconic':
             self.withdraw()
@@ -668,6 +699,7 @@ class ClumsexGUI(tk.Tk):
         self.after(1000, self.check_minimize_loop)
 
     def update_config(self, event=None):
+        """Updates the configuration from the GUI input fields."""
         try:
             state.target_port = self.var_port.get()
             state.duration = float(self.var_duration.get())
@@ -676,71 +708,20 @@ class ClumsexGUI(tk.Tk):
             print(f"Error updating config from GUI: {e}")
 
     def copy_ip(self):
+        """Copies the current IP address to the clipboard."""
         self.clipboard_clear()
         self.clipboard_append(state.current_ip)
 
     def copy_last_ip(self):
+        """Copies the last IP address to the clipboard."""
         self.clipboard_clear()
         self.clipboard_append(state.last_ip)
 
     def on_window_state_change(self, event):
+        """Handles window state changes (e.g., minimize, restore)."""
         pass
 
     def on_close_x(self):
+        """Handles the closing of the main window."""
         state.app_running = False
         if state.mouse_listener:
-            try:
-                state.mouse_listener.stop()
-            except Exception as e:
-                print(f"Error stopping mouse listener on exit: {e}")
-        if state.kb_listener:
-            try:
-                state.kb_listener.stop()
-            except Exception as e:
-                print(f"Error stopping keyboard listener on exit: {e}")
-        if state.divert:
-            try:
-                state.divert.close()
-            except Exception as e:
-                print(f"Error closing divert on exit: {e}")
-        if self.tray_icon:
-            self.tray_icon.stop()
-
-        with state.buffer_cond:
-            state.buffer_cond.notify_all()
-
-        restore_system()
-        self.destroy()
-        time.sleep(0.1)
-        os._exit(0)
-
-    def create_tray_image(self, color_str):
-        if color_str == "#00cc00":
-            image_file = resource_path("icon_on.png")
-        else:
-            image_file = resource_path("icon_off.png")
-        try:
-            return Image.open(image_file)
-        except Exception as e:
-            print(f"Error loading tray icon: {e}")
-            image = Image.new('RGB', (64, 64), (0, 0, 0))
-            d = ImageDraw.Draw(image)
-            d.rectangle([10, 10, 54, 54], fill=color_str)
-            return image
-
-    def show_tray(self):
-        if self.tray_icon:
-            return
-        initial_color = "#00cc00" if state.lag_event.is_set() else "#cc0000"
-        self.last_icon_color = initial_color
-
-        def restore_window(icon, item):
-            icon.stop()
-            self.tray_icon = None
-            self.after(0, self.deiconify)
-
-        def quit_app(icon, item):
-            icon.stop()
-            self.on_close_x()
-
-        menu =
