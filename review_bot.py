@@ -1,59 +1,69 @@
-name: 'Actualizador Clumsex (Blindado)'
+import os
+import datetime
+from google import genai
 
-on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+# --- CONFIGURACIÓN ---
+NOMBRE_ARCHIVO_CODIGO = "clumsex.py" 
+# ---------------------
 
-jobs:
-  auto_update:
-    runs-on: ubuntu-latest
+def clean_gemini_response(response_text):
+    lines = response_text.strip().split('\n')
+    if lines and lines[0].strip().startswith('```'):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == '```':
+        lines = lines[:-1]
+    return '\n'.join(lines).strip()
+
+def run_review():
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("Falta la clave API.")
+        return
+
+    if not os.path.exists(NOMBRE_ARCHIVO_CODIGO):
+        print(f"ERROR: No encuentro '{NOMBRE_ARCHIVO_CODIGO}' en el directorio actual.")
+        # Ayuda visual para debugging
+        print("Archivos disponibles:", os.listdir())
+        return
+
+    with open(NOMBRE_ARCHIVO_CODIGO, "r", encoding="utf-8") as f:
+        contenido_codigo = f.read()
+
+    # Prompt
+    prompt = f"""
+    Actúa como experto en Python. Optimiza y mejora el siguiente código.
+    IMPORTANTE: Devuelve el código completo listo para usar.
+    --- CÓDIGO ---
+    {contenido_codigo}
+    """
     
-    permissions:
-      contents: write # ¡CRÍTICO!
-      
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    client = genai.Client(api_key=api_key)
+    
+    try:
+        print(f"Enviando '{NOMBRE_ARCHIVO_CODIGO}' a Gemini...")
+        response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+        
+        code_limpio = clean_gemini_response(response.text)
+        
+        # Marca de tiempo para forzar el commit
+        ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        watermark = f"# --- AUTO-UPDATED: {ahora} UTC ---"
+        
+        lines = code_limpio.split('\n')
+        if lines and lines[0].startswith("# --- AUTO-UPDATED:"):
+            lines[0] = watermark
+            new_content = '\n'.join(lines)
+        else:
+            new_content = f"{watermark}\n{code_limpio}"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+        with open(NOMBRE_ARCHIVO_CODIGO, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
+        print(f"ÉXITO: '{NOMBRE_ARCHIVO_CODIGO}' actualizado localmente.")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        raise e
 
-      - name: Install Libs
-        run: pip install google-genai
-
-      - name: Debug Previo
-        run: |
-          echo "=== ARCHIVOS ANTES DEL SCRIPT ==="
-          ls -la
-          echo "=== ESTADO GIT ==="
-          git status
-
-      - name: Run Bot
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python review_bot.py
-
-      - name: Debug Post-Script
-        run: |
-          echo "=== ARCHIVOS DESPUES DEL SCRIPT ==="
-          # Verificamos si la fecha cambió en el archivo (Linux timestamp)
-          ls -l "clumsex v12.2 stable.py"
-          echo "=== DIFERENCIAS GIT ==="
-          git diff
-
-      - name: Force Commit & Push
-        run: |
-          git config --global user.name 'Gemini Bot'
-          git config --global user.email 'bot@noreply.github.com'
-          
-          # Agregamos usando comillas simples para proteger los espacios
-          git add 'clumsex v12.2 stable.py'
-          
-          # Commit forzado
-          git commit -m "chore: [AUTO-UPDATE] Nueva versión detectada"
-          
-          # PUSH EXPLÍCITO A MAIN (Esto soluciona el "no hace nada")
-          git push origin HEAD:main
+if __name__ == "__main__":
+    run_review()
