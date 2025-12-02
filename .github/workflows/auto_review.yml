@@ -31,4 +31,3 @@ jobs:
         env:
           # Inyecta la clave API desde GitHub Secrets
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-feat: Añadir workflow de revisión automática
