@@ -1,6 +1,7 @@
 import os
 import datetime
 import sys
+import re
 from google import genai
 
 # --- CONFIGURACIÓN ---
@@ -11,16 +12,31 @@ SEPARATOR = "___LOG_SECTION___"
 MAX_RETRIES = 3
 # ---------------------
 
-def clean_code_part(code_text):
-    lines = code_text.strip().split('\n')
-    if lines and lines[0].strip().startswith('```'):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == '```':
-        lines = lines[:-1]
-    return '\n'.join(lines).strip()
+def extract_python_code(text):
+    """
+    Busca quirúrgicamente el bloque de código entre fences de markdown.
+    Si no encuentra fences, asume que todo el texto es código.
+    """
+    # Patrón: Busca ```python (contenido) ``` o ``` (contenido) ```
+    pattern = r"```(?:python)?\s*(.*?)```"
+    match = re.search(pattern, text, re.DOTALL)
+    
+    if match:
+        # Devuelve solo lo que está ADENTRO de las comillas
+        return match.group(1).strip()
+    else:
+        # Si no hay fences, intentamos limpiar líneas sueltas de chat
+        lines = text.split('\n')
+        # Si la primera línea no parece código (no import, no def, no class, no #), la borramos
+        if lines and not (lines[0].startswith('import') or lines[0].startswith('from') or lines[0].startswith('#')):
+             # Un intento básico de limpieza si falla el regex
+             return text.replace("```python", "").replace("```", "").strip()
+        return text.strip()
 
 def ensure_execution_block(code_content):
+    # Solo agrega el bloque si realmente falta y el archivo parece completo
     if 'if __name__ == "__main__":' not in code_content and "if __name__ == '__main__':" not in code_content:
+        # Solo inyectar si parece que el código termina abruptamente o es una clase GUI
         code_content += '\n\nif __name__ == "__main__":\n    app = ClumsexGUI()\n    app.mainloop()'
     return code_content
 
@@ -32,7 +48,6 @@ def check_syntax(code_string):
         return False, str(e)
 
 def get_next_task():
-    """Lee el TODO.md y extrae la primera tarea pendiente."""
     if not os.path.exists(FILE_TODO):
         return None, []
     
@@ -42,10 +57,9 @@ def get_next_task():
     task = None
     remaining_lines = []
     
-    # Busca la primera línea que empiece con guión o checkbox vacío
-    for i, line in enumerate(lines):
+    for line in lines:
         clean_line = line.strip()
-        # Detecta formatos: "- Tarea", "- [ ] Tarea", "* Tarea"
+        # Detecta la primera tarea pendiente
         if not task and (clean_line.startswith("- [ ]") or (clean_line.startswith("- ") and "[x]" not in clean_line)):
             task = clean_line.replace("- [ ]", "").replace("- ", "").strip()
         else:
@@ -56,46 +70,47 @@ def get_next_task():
 def run_review():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("Falta la clave API.")
+        print("Falta clave API")
         sys.exit(1)
 
     if not os.path.exists(FILE_CODE):
-        print(f"Error: No encuentro {FILE_CODE}")
+        print(f"Error: No existe {FILE_CODE}")
         return
 
-    # 1. Obtener la misión del TODO.md
-    current_task, remaining_todo_lines = get_next_task()
+    # 1. Obtener Misión
+    current_task, remaining_todo = get_next_task()
     
     if current_task:
-        print(f"📋 Misión detectada: {current_task}")
-        mission_prompt = f"TU MISIÓN PRIORITARIA: Implementar esta tarea: '{current_task}'."
+        print(f"📋 Misión: {current_task}")
+        mission_prompt = f"TU ÚNICA PRIORIDAD es implementar esta tarea del TODO: '{current_task}'."
     else:
-        print("💤 No hay tareas en TODO.md. Modo Mantenimiento (Optimización).")
-        mission_prompt = "TU MISIÓN: Analizar el código, buscar bugs o mejoras de rendimiento y aplicarlas."
+        print("💤 Modo Mantenimiento")
+        mission_prompt = "Tu tarea es revisar el código, optimizar funciones lentas y limpiar sintaxis."
 
-    # Leer código actual
     with open(FILE_CODE, "r", encoding="utf-8") as f:
         current_code = f.read()
 
     client = genai.Client(api_key=api_key)
     attempt = 0
+
+    # Prompt Refinado para evitar charla
+    prompt_template = """
+    Actúa como experto en Python Senior. {mission}
     
-    # Prompt Base
-    current_prompt_text = f"""
-    Actúa como experto en Python. {mission_prompt}
+    IMPORTANTE:
+    1. Mantén la lógica existente, solo modifica lo necesario para la tarea.
+    2. El código es largo, NO LO CORTES. Devuelve el script COMPLETO.
+    3. Si agregas UI, usa Tkinter compatible.
     
-    REGLAS:
-    1. NO ELIMINES FUNCIONES EXISTENTES a menos que la tarea lo pida.
-    2. Asegura el bloque `if __name__ == "__main__":` al final.
-    3. Devuelve el código completo.
-    
-    Formato:
-    [CÓDIGO]
-    {SEPARATOR}
-    [LOG EXPLICATIVO]
-    
+    Formato OBLIGATORIO de respuesta:
+    ```python
+    ... código completo aquí ...
+    ```
+    {separator}
+    ... explicación breve del cambio ...
+
     --- CÓDIGO ACTUAL ---
-    {current_code}
+    {code}
     """
 
     while attempt < MAX_RETRIES:
@@ -103,57 +118,72 @@ def run_review():
         print(f"🔄 Intento {attempt}/{MAX_RETRIES}...")
 
         try:
-            response = client.models.generate_content(model='gemini-2.0-flash', contents=current_prompt_text)
+            full_prompt = prompt_template.format(
+                mission=mission_prompt,
+                separator=SEPARATOR,
+                code=current_code
+            )
+            
+            # Usamos 2.0 Flash porque maneja contextos largos mejor
+            response = client.models.generate_content(model='gemini-2.0-flash', contents=full_prompt)
             full_text = response.text
             
+            # 1. Separar Log
             if SEPARATOR in full_text:
                 parts = full_text.split(SEPARATOR)
-                raw_code = parts[0]
-                log_text = parts[1].strip()
+                code_part = parts[0]
+                log_part = parts[1].strip()
             else:
-                raw_code = full_text
-                log_text = f"Tarea completada: {current_task}" if current_task else "Optimización general."
+                code_part = full_text
+                log_part = f"Update: {current_task}" if current_task else "Optimización general"
 
-            candidate_code = clean_code_part(raw_code)
-            candidate_code = ensure_execution_block(candidate_code)
+            # 2. Extracción Quirúrgica (Regex)
+            clean_code = extract_python_code(code_part)
+            clean_code = ensure_execution_block(clean_code)
 
-            # Auto-curación de sintaxis
-            is_valid, error_msg = check_syntax(candidate_code)
+            # 3. Validación
+            is_valid, error_msg = check_syntax(clean_code)
             
             if is_valid:
-                # --- GUARDADO ---
+                # Guardar
                 ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                watermark = f"# --- AUTO-UPDATED: {ahora} UTC ---"
+                header = f"# --- AUTO-UPDATED: {ahora} UTC ---"
                 
-                lines = candidate_code.split('\n')
+                lines = clean_code.split('\n')
                 if lines and lines[0].startswith("# --- AUTO-UPDATED:"):
-                    lines[0] = watermark
+                    lines[0] = header
                     final_content = '\n'.join(lines)
                 else:
-                    final_content = f"{watermark}\n{candidate_code}"
+                    final_content = f"{header}\n{clean_code}"
 
                 with open(FILE_CODE, "w", encoding="utf-8") as f:
                     f.write(final_content)
-
-                # Log
-                log_prefix = f"✅ **TAREA COMPLETADA:** {current_task}\n" if current_task else ""
-                with open(FILE_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"\n\n## 🕒 Versión {ahora}\n{log_prefix}{log_text}")
                 
-                # Actualizar TODO.md (Borrar la tarea hecha)
+                # Log
+                log_msg = f"\n\n## 🕒 {ahora}\n"
+                if current_task: log_msg += f"✅ **Tarea:** {current_task}\n"
+                log_msg += log_part
+                
+                with open(FILE_LOG, "a", encoding="utf-8") as f:
+                    f.write(log_msg)
+
+                # Borrar tarea del TODO
                 if current_task:
                     with open(FILE_TODO, "w", encoding="utf-8") as f:
-                        f.writelines(remaining_todo_lines)
-                    print("🗑️ Tarea eliminada del archivo TODO.")
+                        f.writelines(remaining_todo)
 
+                print("✅ Éxito total.")
                 return
 
             else:
-                print(f"❌ Error sintaxis: {error_msg}")
-                current_prompt_text = f"El código tiene error: {error_msg}. Corrígelo y devuélvelo completo."
+                print(f"❌ Error Sintaxis: {error_msg}")
+                # Reintentar dándole el error a la IA
+                # Actualizamos el código "current" para el prompt de error, 
+                # pero mantenemos la misión original en contexto
+                mission_prompt = f"El código anterior falló con: {error_msg}. CORRIGE EL ERROR DE SINTAXIS y devuelve todo completo."
 
         except Exception as e:
-            print(f"Error API: {e}")
+            print(f"🔥 Error API/Script: {e}")
     
     sys.exit(1)
 
