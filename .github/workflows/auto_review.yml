@@ -12,54 +12,27 @@ jobs:
     permissions:
       contents: write
       
-    steps:
-      - name: Checkout del Repositorio
+steps:
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
 
-      - name: Configurar Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Instalar Librería de Google
+      - name: Install Libs
         run: pip install google-genai
 
-      # === GENERACIÓN CON 3 VIDAS (Auto-corrección) ===
-      - name: Generar Código Seguro
+      # El script ahora maneja sus propios reintentos internamente
+      - name: Ejecutar Bot Auto-Curativo
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          MAX_RETRIES=3
-          count=0
-          success=false
-          
-          while [ $count -lt $MAX_RETRIES ]; do
-            count=$((count+1))
-            echo "🔄 Intento $count de $MAX_RETRIES..."
-            
-            python review_bot.py
-            
-            if python -m py_compile clumsex.py; then
-              echo "✅ Sintaxis válida."
-              success=true
-              break
-            else
-              echo "❌ Error de sintaxis. Reintentando..."
-              if [ $count -lt $MAX_RETRIES ]; then
-                git restore clumsex.py
-                sleep 2
-              fi
-            fi
-          done
+        run: python review_bot.py
 
-          if [ "$success" = false ]; then
-            echo "⛔ Fallaron todos los intentos."
-            exit 1
-          fi
-
-      - name: Commit y Push Robusto
+      - name: Commit y Push
         run: |
           git config --global user.name 'Gemini Bot'
           git config --global user.email 'bot@noreply.github.com'
