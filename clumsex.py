@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 19:49:35 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 20:11:58 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -77,9 +77,7 @@ class GlobalState:
             return str(key_obj).replace("Button.", "").capitalize() + " Click"
         else:
             try:
-                return key_obj.char.upper()
-            except AttributeError:
-                return str(key_obj).replace("Key.", "").upper()
+                return key_obj.char.upper() if hasattr(key_obj, 'char') else str(key_obj).replace("Key.", "").upper()
             except:
                 return str(key_obj).replace("Key.", "").upper()
 
@@ -122,17 +120,12 @@ class GlobalState:
 
         if h_type == "mouse":
             try:
-                btn_name = t_val.split('.')[-1]
-                self.trigger_btn = getattr(mouse.Button, btn_name, mouse.Button.middle)
+                self.trigger_btn = getattr(mouse.Button, t_val.split('.')[-1], mouse.Button.middle)
             except AttributeError:
                 self.trigger_btn = mouse.Button.middle
         else:
             try:
-                if "Key." in t_val:
-                    key_name = t_val.split('.')[-1]
-                    self.trigger_btn = getattr(keyboard.Key, key_name, keyboard.Key.f2)
-                else:
-                    self.trigger_btn = keyboard.KeyCode(char=t_val)
+                self.trigger_btn = getattr(keyboard.Key, t_val.split('.')[-1], keyboard.Key.f2) if "Key." in t_val else keyboard.KeyCode(char=t_val)
             except AttributeError:
                 self.trigger_btn = keyboard.Key.f2
 
@@ -187,9 +180,8 @@ def watchdog_worker():
 # --- CAPTURE WORKER ---
 def capture_worker():
     """Captures and queues network packets."""
-    active_port_filter = state.target_port
-
     while state.app_running:
+        active_port_filter = state.target_port
         current_filter = f"outbound and tcp.DstPort == {active_port_filter} and tcp.PayloadLength > 0"
 
         try:
@@ -203,18 +195,18 @@ def capture_worker():
                     if state.target_port != active_port_filter:
                         with state.buffer_cond:
                             state.buffer_cond.notify()
-                        active_port_filter = state.target_port
                         break
 
                     with state.lock:
-                        if state.current_ip != packet.dst_addr:
-                            if state.current_ip != "---":
-                                state.last_ip = state.current_ip
-                            state.current_ip = packet.dst_addr
+                        current_ip = packet.dst_addr
+                        if state.current_ip != current_ip:
+                            state.last_ip = state.current_ip if state.current_ip != "---" else state.last_ip
+                            state.current_ip = current_ip
 
+                    packet_data = packet.raw
                     if state.lag_event.is_set():
                         with state.buffer_cond:
-                            state.packet_buffer.append(packet.raw)
+                            state.packet_buffer.append(packet_data)
                     else:
                         w.send(packet)
                         if state.packet_buffer:
@@ -246,8 +238,7 @@ def flush_worker():
             while state.app_running:
                 with state.buffer_cond:
                     while (not queue or state.lag_event.is_set()) and state.app_running:
-                        if state.lag_event.is_set():
-                            last_check = perf()
+                        last_check = perf() if state.lag_event.is_set() else last_check
                         state.buffer_cond.wait(1)
 
                     if not state.app_running:
@@ -273,10 +264,7 @@ def flush_worker():
                     tokens = 0
 
                 if tokens < 1.0:
-                    wait_time = (1.0 - tokens) / current_rate
-                    if wait_time > 0:
-                        time.sleep(wait_time)
-
+                    time.sleep((1.0 - tokens) / current_rate)
                     now = perf()
                     elapsed = now - last_check
                     last_check = now
@@ -335,11 +323,11 @@ def on_input_event(key_or_btn, device_type):
         return
 
     if device_type == "keyboard":
-        invalid_keys = [keyboard.Key.shift, keyboard.Key.shift_r,
+        invalid_keys = {keyboard.Key.shift, keyboard.Key.shift_r,
                         keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
                         keyboard.Key.alt_l, keyboard.Key.alt_gr,
                         keyboard.Key.cmd, keyboard.Key.cmd_r,
-                        keyboard.Key.caps_lock]
+                        keyboard.Key.caps_lock}
         if key_or_btn in invalid_keys:
             return
 
@@ -374,12 +362,11 @@ def restart_input_listeners():
 
 def on_mouse_click(x, y, button, pressed):
     """Handles mouse clicks."""
-    if not pressed:
-        return
-    if state.remap_mode:
-        on_input_event(button, "mouse")
-    elif state.hotkey_type == "mouse" and button == state.trigger_btn:
-        toggle_lag()
+    if pressed:
+        if state.remap_mode:
+            on_input_event(button, "mouse")
+        elif state.hotkey_type == "mouse" and button == state.trigger_btn:
+            toggle_lag()
 
 def on_key_press(key):
     """Handles key presses."""
@@ -415,10 +402,8 @@ class OverlayTimer(tk.Toplevel):
         self.bind('<ButtonRelease-1>', self.release_win)
         self.update_click_through()
 
-        if state.timer_pos:
-            self.geometry(f"{self.width}x{self.height}+{state.timer_pos[0]}+{state.timer_pos[1]}")
-        else:
-            self.geometry(f"{self.width}x{self.height}+-1000+-1000")
+        x, y = state.timer_pos if state.timer_pos else (-1000, -1000)
+        self.geometry(f"{self.width}x{self.height}+{x}+{y}")
 
     def click_win(self, event):
         """Handles click events for dragging."""
@@ -441,13 +426,9 @@ class OverlayTimer(tk.Toplevel):
         try:
             hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
             style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            if state.lock_timer:
-                style = style | 0x80000 | 0x20
-                self.lbl_time.config(cursor="arrow")
-            else:
-                style = style & ~0x20 | 0x80000
-                self.lbl_time.config(cursor="fleur")
+            style = (style | 0x80000 | 0x20) if state.lock_timer else (style & ~0x20 | 0x80000)
             ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
+            self.lbl_time.config(cursor="arrow" if state.lock_timer else "fleur")
         except Exception as e:
             logging.debug(f"Error updating click through: {e}")
 
@@ -456,10 +437,8 @@ class OverlayTimer(tk.Toplevel):
         is_visible = (not state.lock_timer) or state.lag_event.is_set()
 
         if is_visible != self._last_visible:
-            if not is_visible:
-                self.withdraw()
-            else:
-                self.deiconify()
+            getattr(self, "deiconify" if is_visible else "withdraw")()
+            if is_visible:
                 self.attributes("-topmost", True)
             self._last_visible = is_visible
 
@@ -468,20 +447,10 @@ class OverlayTimer(tk.Toplevel):
 
         text, color = "", ""
         if not state.lag_event.is_set():
-            if not state.lock_timer:
-                text, color = "DRAG ME", "#FFFFFF"
-            else:
-                text, color = "READY", "#00FF00"
+            text, color = ("DRAG ME", "#FFFFFF") if not state.lock_timer else ("READY", "#00FF00")
         else:
-            elapsed = time.perf_counter() - state.lag_start_time
-            remaining = state.duration - elapsed
-            remaining = max(remaining, 0)
-            if remaining > 6.0:
-                color = "#00FF00"
-            elif remaining > 3.0:
-                color = "#FFFF00"
-            else:
-                color = "#FF0000"
+            remaining = max(0, state.duration - (time.perf_counter() - state.lag_start_time))
+            color = "#00FF00" if remaining > 6.0 else "#FFFF00" if remaining > 3.0 else "#FF0000"
             text = f"{remaining:.1f}s"
 
         if text != self._last_text or color != self._last_color:
@@ -500,11 +469,8 @@ class OverlayTimer(tk.Toplevel):
                         win_w = rect.right - rect.left
                         new_x = rect.left + (win_w // 2) - (self.width // 2)
                         new_y = rect.top + 20
-                        curr_geo = self.geometry().split('+')
-                        if len(curr_geo) > 1:
-                            cx, cy = int(curr_geo[1]), int(curr_geo[2])
-                            if abs(cx - new_x) > 2 or abs(cy - new_y) > 2:
-                                self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
+                        if abs(self.winfo_x() - new_x) > 2 or abs(self.winfo_y() - new_y) > 2:
+                            self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
                 except Exception as e:
                     logging.debug(f"Error tracking window: {e}")
 
@@ -525,23 +491,25 @@ class ClumsexGUI(tk.Tk):
         self.bind("<Map>", self.on_window_state_change)
 
         self.tray_icon = None
-        self.last_icon_color = "red"
         self._last_lag_state = None
         self._last_ip_text = ""
         self._last_prev_ip_text = ""
         self._last_btn_text = ""
 
-        self.bg_color = "#f2f2f2"
-        self.configure(bg=self.bg_color)
+        bg_color = "#f2f2f2"
+        self.configure(bg=bg_color)
 
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure("TFrame", background=self.bg_color)
-        style.configure("TLabelframe", background=self.bg_color, relief="flat")
-        style.configure("TLabelframe.Label", background=self.bg_color, font=("Segoe UI", 10, "bold"), foreground="#333")
-        style.configure("TLabel", background=self.bg_color, font=("Segoe UI", 9), foreground="#444")
-        style.configure("TCheckbutton", background=self.bg_color, font=("Segoe UI", 9))
-        style.configure("Flat.TButton", font=("Segoe UI", 9, "bold"), relief="flat", background="#e0e0e0")
+        for element, config in [
+            ("TFrame", {"background": bg_color}),
+            ("TLabelframe", {"background": bg_color, "relief": "flat"}),
+            ("TLabelframe.Label", {"background": bg_color, "font": ("Segoe UI", 10, "bold"), "foreground": "#333"}),
+            ("TLabel", {"background": bg_color, "font": ("Segoe UI", 9), "foreground": "#444"}),
+            ("TCheckbutton", {"background": bg_color, "font": ("Segoe UI", 9)}),
+            ("Flat.TButton", {"font": ("Segoe UI", 9, "bold"), "relief": "flat", "background": "#e0e0e0"})
+        ]:
+            style.configure(element, **config)
         style.map("Flat.TButton", background=[('active', '#d0d0d0')])
 
         self.var_port = tk.StringVar(value=state.target_port)
@@ -625,17 +593,17 @@ class ClumsexGUI(tk.Tk):
         self.overlay.update_view()
 
         if active_now != self._last_lag_state:
-            target_color = "#00cc00" if active_now else "#cc0000"
+            color = "#00cc00" if active_now else "#cc0000"
             status_text = "ON" if active_now else "OFF"
-            self.canvas_ind.itemconfig(self.ind_rect, fill=target_color)
+            self.canvas_ind.itemconfig(self.ind_rect, fill=color)
             self.canvas_ind.itemconfig(self.ind_text, text=status_text)
             if self.tray_icon:
-                self.tray_icon.icon = self.create_tray_image(target_color)
+                self.tray_icon.icon = self.create_tray_image(color)
             self._last_lag_state = active_now
 
-        w = self.canvas_ind.winfo_width()
-        self.canvas_ind.coords(self.ind_rect, 0, 0, w, 50)
-        self.canvas_ind.coords(self.ind_text, w/2, 23)
+        width = self.canvas_ind.winfo_width()
+        self.canvas_ind.coords(self.ind_rect, 0, 0, width, 50)
+        self.canvas_ind.coords(self.ind_text, width/2, 23)
 
         if state.current_ip != self._last_ip_text:
             self.var_ip.set(state.current_ip)
@@ -721,17 +689,36 @@ class ClumsexGUI(tk.Tk):
             return Image.open(image_file)
         except FileNotFoundError:
             logging.error(f"Tray icon file not found: {image_file}")
-            image = Image.new('RGB', (64, 64), (0, 0, 0))
-            d = ImageDraw.Draw(image)
-            d.rectangle([10, 10, 54, 54], fill=color_str)
-            return image
         except Exception as e:
             logging.error(f"Error loading tray icon: {e}")
-            image = Image.new('RGB', (64, 64), (0, 0, 0))
-            d = ImageDraw.Draw(image)
-            d.rectangle([10, 10, 54, 54], fill=color_str)
-            return image
+
+        image = Image.new('RGB', (64, 64), (0, 0, 0))
+        d = ImageDraw.Draw(image)
+        d.rectangle([10, 10, 54, 54], fill=color_str)
+        return image
+
+    def show_tray(self):
+        """Shows the application icon in the system tray."""
+        if self.tray_icon:
+            return
+
+        def on_tray_exit(icon, item):
+            self.after(0, self.on_close_x)
+
+        def on_tray_show(icon, item):
+            self.after(0, self.deiconify)
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Show", on_tray_show),
+            pystray.MenuItem("Exit", on_tray_exit)
+        )
+
+        self.tray_icon = pystray.Icon("clumsex", icon=self.create_tray_image("#cc0000"), title="clumsex", menu=menu)
+
+        def run_tray():
+            self.tray_icon.run()
+
+        threading.Thread(target=run_tray, daemon=True).start()
 
 if __name__ == "__main__":
-    app = ClumsexGUI()
-    app.mainloop()
+    app = Clum
