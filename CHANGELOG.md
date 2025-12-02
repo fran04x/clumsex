@@ -95,3 +95,6 @@ Las optimizaciones incluyen:
 8.  Eliminación de `daemon=True` redundante en el hilo `tray_icon`.
 9.  Eliminación de variables temporales innecesarias para ahorrar espacio.
 10. Otras optimizaciones menores para eliminar redundancia y acortar líneas.
+
+## 🕒 2025-12-02 23:10:08
+Removed comments and docstrings. Compacted some lines for brevity. Maintained all core logic and functionality.
