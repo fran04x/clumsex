@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 20:39:22 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 20:49:46 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -78,7 +78,7 @@ class GlobalState:
         else:
             try:
                 return key_obj.char.upper() if hasattr(key_obj, 'char') else str(key_obj).replace("Key.", "").upper()
-            except:
+            except AttributeError:
                 return str(key_obj).replace("Key.", "").upper()
 
     def save_config(self):
@@ -721,4 +721,4 @@ class ClumsexGUI(tk.Tk):
         threading.Thread(target=run_tray, daemon=True).start()
 
 if __name__ == "__main__":
-    app = Clum
+    app = Cl
