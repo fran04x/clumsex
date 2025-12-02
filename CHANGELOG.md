@@ -98,3 +98,6 @@ Las optimizaciones incluyen:
 
 ## 🕒 2025-12-02 23:10:08
 Removed comments and docstrings. Compacted some lines for brevity. Maintained all core logic and functionality.
+
+## 🕒 2025-12-02 23:28:51
+Eliminé todos los comentarios y docstrings para reducir el tamaño del código. No se realizaron cambios lógicos en el código. El código conserva su funcionalidad original.
