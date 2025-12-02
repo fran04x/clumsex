@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 18:48:20 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 19:10:20 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -88,7 +88,7 @@ class GlobalState:
         }
         try:
             with open(CONFIG_FILE, 'w') as f: json.dump(data, f, indent=4)
-        except Exception: pass
+        except Exception: print("Error saving config")
 
     def load_config(self):
         if not os.path.exists(CONFIG_FILE): return
@@ -112,7 +112,7 @@ class GlobalState:
                     else:
                         self.trigger_btn = keyboard.KeyCode(char=t_val)
                 self.trigger_str = self.get_clean_trigger_str(self.trigger_btn, self.hotkey_type)
-        except Exception: pass
+        except Exception: print("Error loading config")
 
 state = GlobalState()
 
@@ -128,11 +128,11 @@ def optimize_system():
         ctypes.windll.kernel32.CloseHandle(handle)
         ctypes.windll.winmm.timeBeginPeriod(1)
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('clumsex.v12.2')
-    except Exception: pass
+    except Exception: print("Error optimizing system")
 
 def restore_system():
     try: ctypes.windll.winmm.timeEndPeriod(1)
-    except Exception: pass
+    except Exception: print("Error restoring system")
 
 def restore_gc():
     with state.gc_lock:
@@ -193,7 +193,7 @@ def capture_worker():
                     if state.lag_event.is_set():
                         # Lag ON: Encolar bajo lock del condition
                         with state.buffer_cond:
-                            state.packet_buffer.append((packet.raw, packet.interface, packet.direction))
+                            state.packet_buffer.append(packet.raw) # Se guarda solo el raw, evita serializacion
                     else:
                         # Lag OFF: Passthrough
                         w.send(packet)
@@ -204,8 +204,9 @@ def capture_worker():
                                 state.buffer_cond.notify()
 
         except OSError: 
-            pass
-        except Exception:
+            print("WinDivert OSError")
+        except Exception as e:
+            print(f"Capture died: {e}")
             time.sleep(1)
         finally:
             state.divert = None
@@ -214,14 +215,12 @@ def capture_worker():
 def flush_worker():
     try:
         with pydivert.WinDivert("false") as w_inject:
-            PacketCls = pydivert.Packet
-            send_func = w_inject.send
             perf = time.perf_counter
-            
             queue = state.packet_buffer
             base_rate = state.shaping_rate
+            burst = state.shaping_burst
             
-            tokens = state.shaping_burst
+            tokens = burst
             last_check = perf()
 
             while state.app_running:
@@ -233,10 +232,13 @@ def flush_worker():
                     while (not queue or state.lag_event.is_set()) and state.app_running:
                         if state.lag_event.is_set():
                             last_check = perf()
-                        state.buffer_cond.wait() # 0% CPU Sleep
+                        state.buffer_cond.wait(1) # 0% CPU Sleep, con timeout
                     
                     if not state.app_running: break
-                    packet_data = queue.popleft()
+                    try:
+                        packet_data = queue.popleft()
+                    except IndexError:
+                        continue
 
                 # 2. PROCESAMIENTO
                 if state.lag_event.is_set():
@@ -249,7 +251,7 @@ def flush_worker():
                 now = perf()
                 elapsed = now - last_check
                 last_check = now
-                tokens = min(state.shaping_burst, tokens + (elapsed * current_rate))
+                tokens = min(burst, tokens + (elapsed * current_rate))
                 if tokens < 0: tokens = 0
 
                 # Token Wait Matemático (No spinlock)
@@ -261,7 +263,7 @@ def flush_worker():
                     now = perf()
                     elapsed = now - last_check
                     last_check = now
-                    tokens = min(state.shaping_burst, tokens + (elapsed * current_rate))
+                    tokens = min(burst, tokens + (elapsed * current_rate))
 
                 if state.lag_event.is_set():
                     with state.buffer_cond:
@@ -269,15 +271,10 @@ def flush_worker():
                     continue
 
                 try:
-                    raw, iface, direction = packet_data
-                    if raw is None: continue 
-                    pkt = PacketCls.__new__(PacketCls)
-                    pkt.raw = raw
-                    pkt.interface = iface
-                    pkt.direction = direction
-                    send_func(pkt)
+                    w_inject.send(packet_data)
                     tokens -= 1.0
-                except Exception: pass
+                except Exception:
+                    pass #print(f"Flush Send Err: {e}")
                 
                 if not queue:
                     restore_gc()
@@ -341,10 +338,10 @@ def on_input_event(key_or_btn, device_type):
 def restart_input_listeners():
     if state.mouse_listener:
         try: state.mouse_listener.stop(); state.mouse_listener.join(0.1) 
-        except Exception: pass
+        except Exception: print("Error stopping mouse listener")
     if state.kb_listener:
         try: state.kb_listener.stop(); state.kb_listener.join(0.1)
-        except Exception: pass
+        except Exception: print("Error stopping kb listener")
     time.sleep(0.1)
     state.mouse_listener = mouse.Listener(on_click=on_mouse_click)
     state.mouse_listener.start()
@@ -417,7 +414,8 @@ class OverlayTimer(tk.Toplevel):
                 style = style & ~0x20 | 0x80000
                 self.lbl_time.config(cursor="fleur")
             ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
-        except Exception: pass
+        except Exception:
+            pass #print("Error updating click through")
 
     def update_view(self):
         is_visible = (not state.lock_timer) or state.lag_event.is_set()
@@ -467,7 +465,8 @@ class OverlayTimer(tk.Toplevel):
                             cx, cy = int(curr_geo[1]), int(curr_geo[2])
                             if abs(cx - new_x) > 2 or abs(cy - new_y) > 2:
                                 self.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
-                except Exception: pass
+                except Exception:
+                    pass #print("Error tracking window")
 
 # --- GUI PRINCIPAL ---
 class ClumsexGUI(tk.Tk):
@@ -622,7 +621,7 @@ class ClumsexGUI(tk.Tk):
             state.target_port = self.var_port.get()
             state.duration = float(self.var_duration.get())
             state.save_config()
-        except Exception: pass
+        except Exception: print("Error updating config")
 
     def copy_ip(self):
         self.clipboard_clear()
@@ -638,13 +637,13 @@ class ClumsexGUI(tk.Tk):
         state.app_running = False
         if state.mouse_listener:
             try: state.mouse_listener.stop()
-            except Exception: pass
+            except Exception: print("Error stopping mouse listener on close")
         if state.kb_listener:
             try: state.kb_listener.stop()
-            except Exception: pass
+            except Exception: print("Error stopping kb listener on close")
         if state.divert:
             try: state.divert.close()
-            except Exception: pass
+            except Exception: print("Error closing divert on close")
         if self.tray_icon: self.tray_icon.stop()
         
         # Wake up workers to exit loops

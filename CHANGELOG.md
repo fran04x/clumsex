@@ -24,3 +24,6 @@ Actualización automática (Sin detalles generados).
 - **Simplifiqué el condicional de la imagen del ícono del tray** en `create_tray_image` para hacerlo más conciso.
 - **Unifiqué el manejo de excepciones** para hacer el código más legible y evitar repeticiones. Donde antes había `except:` ahora hay `except Exception:`.
 - **Eliminé `finally: state.
+
+## 🕒 Versión 2025-12-02 19:10:20
+- **Capture Worker: Reducción de Serialización (CPU/Memoria):** En el `capture_worker`, se modificó la forma en que los paquetes se
