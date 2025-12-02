@@ -1,4 +1,4 @@
-# --- AUTO-UPDATED: 2025-12-02 22:41:40 UTC ---
+# --- AUTO-UPDATED: 2025-12-02 22:52:14 UTC ---
 import tkinter as tk
 from tkinter import ttk
 import pydivert
@@ -22,10 +22,9 @@ class RECT(ctypes.Structure):
 
 def resource_path(relative_path):
     try:
-        base_path = sys._MEIPASS
+        return sys._MEIPASS + '/' + relative_path
     except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
 
 APP_NAME = "clumsex"
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", APP_NAME)
@@ -549,19 +548,19 @@ class ClumsexGUI(tk.Tk):
 
     def on_close_x(self):
         state.app_running = False
-        def safe_stop(listener, listener_name):
+        def safe_stop(listener, name):
             if listener:
                 try:
                     listener.stop()
                 except Exception as e:
-                    logging.error(f"Error stopping {listener_name} listener on close: %s", e)
+                    logging.error(f"Error stopping {name}: %s", e)
         safe_stop(state.mouse_listener, "mouse")
         safe_stop(state.kb_listener, "keyboard")
         if state.divert:
             try:
                 state.divert.close()
             except Exception as e:
-                logging.error(f"Error closing divert on close: %s", e)
+                logging.error(f"Error closing divert: %s", e)
         if self.tray_icon:
             self.tray_icon.stop()
         with state.buffer_cond:
@@ -596,9 +595,7 @@ class ClumsexGUI(tk.Tk):
             pystray.MenuItem("Exit", on_tray_exit)
         )
         self.tray_icon = pystray.Icon("clumsex", icon=self.create_tray_image("#cc0000"), title="clumsex", menu=menu)
-        def run_tray():
-            self.tray_icon.run()
-        threading.Thread(target=run_tray, daemon=True).start()
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
 if __name__ == "__main__":
     app = ClumsexGUI()

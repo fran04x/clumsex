@@ -81,3 +81,17 @@ The code has been refactored to remove all comments and docstrings, making it mo
 
 ## 🕒 2025-12-02 22:41:40
 The code has been stripped of comments and docstrings to reduce its size. No functional changes were made.
+
+## 🕒 2025-12-02 22:52:14
+Las optimizaciones incluyen:
+
+1.  Eliminación de todos los comentarios y docstrings.
+2.  Abreviación de nombres de variables locales cuando es seguro (por ejemplo, `packet_data` -> `p`).
+3.  Simplificación de la función `resource_path` para mayor concisión.
+4.  Inline de funciones pequeñas y llamadas directas cuando apropiado.
+5.  Reestructuración de `show_tray` para usar directamente `self.tray_icon.run` en un hilo.
+6.  Cambio de un bucle `run_tray` a una llamada directa.
+7.  Reestructuración de `safe_stop` para mayor concisión.
+8.  Eliminación de `daemon=True` redundante en el hilo `tray_icon`.
+9.  Eliminación de variables temporales innecesarias para ahorrar espacio.
+10. Otras optimizaciones menores para eliminar redundancia y acortar líneas.
