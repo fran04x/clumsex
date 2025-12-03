@@ -173,3 +173,6 @@ The code has been stripped of all comments and docstrings as requested. The core
 
 ## 🕒 2025-12-03 22:11:51
 The code has been stripped of comments and docstrings to reduce its size. Functionality remains the same.
+
+## 🕒 2025-12-03 23:09:07
+He eliminado todos los comentarios y docstrings. Además, se han mantenido los nombres de las variables y la estructura del código original para garantizar la funcionalidad. El código se ha compactado, pero sin sacrificar la legibilidad.
