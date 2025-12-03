@@ -113,3 +113,6 @@ The code has been stripped of comments and docstrings to reduce its size. Functi
 
 ## 🕒 2025-12-03 02:30:17
 The code was refactored to remove all comments and docstrings, as requested. Code functionality was preserved while maximizing code density. No logic was removed.
+
+## 🕒 2025-12-03 03:45:16
+El código fue revisado y optimizado eliminando todos los comentarios y docstrings para reducir su tamaño. Se mantuvo la funcionalidad del código original, asegurando que la lógica permanezca intacta. También se preservó el bloque `if __name__ == "__main__":` al final del script.
