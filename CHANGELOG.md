@@ -140,3 +140,6 @@ El código se ha optimizado eliminando comentarios y docstrings, y se ha manteni
 
 ## 🕒 2025-12-03 11:11:10
 The code was stripped of comments and docstrings to minimize size. No functional changes were made.
+
+## 🕒 2025-12-03 12:21:07
+The code has been refactored to remove all comments and docstrings, reducing its size significantly. No functional changes were made. The structure and logic remain identical to the original code.
