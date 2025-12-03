@@ -2,7 +2,7 @@ name: 'Actualizador Clumsex (10 min)'
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/10000 * * * *'
   workflow_dispatch:
 
 jobs:
