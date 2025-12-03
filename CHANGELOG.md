@@ -161,3 +161,6 @@ El código ha sido revisado y optimizado eliminando comentarios y docstrings par
 
 ## 🕒 2025-12-03 18:16:53
 The code has been stripped of comments and docstrings to minimize its length. No logic was altered.
+
+## 🕒 2025-12-03 19:10:40
+He eliminado todos los comentarios y docstrings, compactado el código manteniendo la funcionalidad.
