@@ -191,3 +191,6 @@ El código se ha compactado eliminando comentarios y docstrings. No se ha modifi
 
 ## 🕒 2025-12-04 05:11:32
 Eliminé comentarios y docstrings para reducir el tamaño del código. El código permanece funcional.
+
+## 🕒 2025-12-04 06:17:07
+El código se ha optimizado eliminando todos los comentarios y docstrings, y reduciendo los espacios en blanco innecesarios para compactarlo. La funcionalidad principal se ha mantenido intacta.
