@@ -200,3 +200,6 @@ El código se ha revisado y se han eliminado todos los comentarios y docstrings 
 
 ## 🕒 2025-12-04 08:16:30
 The code has been stripped of all comments and docstrings to minimize its length while maintaining functionality. No logic has been altered.
+
+## 🕒 2025-12-04 09:15:00
+Removed all comments and docstrings to reduce size. The code's core logic remains intact. Minor formatting adjustments were made for readability.
