@@ -272,3 +272,6 @@ El código se ha revisado para eliminar todos los comentarios y docstrings, cump
 
 ## 🕒 2025-12-05 09:13:05
 The code has been stripped of all comments and docstrings to reduce its size. No functional changes were made during this process.
+
+## 🕒 2025-12-05 10:12:09
+He compactado el código eliminando comentarios y docstrings, manteniendo la funcionalidad. Se conservaron los imports, definiciones de clases y funciones, y la estructura general del programa. Se respetó el bloque `if __name__ == "__main__":` al final del script.
