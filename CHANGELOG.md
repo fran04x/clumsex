@@ -278,3 +278,6 @@ He compactado el código eliminando comentarios y docstrings, manteniendo la fun
 
 ## 🕒 2025-12-05 11:11:04
 The code was stripped of all comments and docstrings as requested. It maintains functionality while reducing size.
+
+## 🕒 2025-12-05 12:20:50
+El código se ha limpiado eliminando todos los comentarios y docstrings. Se ha mantenido la estructura y funcionalidad del código original, optimizando para reducir el número de líneas sin afectar la lógica.
